@@ -37,12 +37,10 @@ export async function getFeed(request, env, ctx) {
   console.log(`[feed.js] originalXML.replace()`);
   const rewrittenXML = originalXML.replace(searchPattern, replacementPattern);
   
-  // TODO: Delete Me
-  console.log(rewrittenXML);
-  
   const headers = new Headers(response.headers);
   headers.delete('Content-Length');
   
+  console.log(`[feed.js] return ${JSON.stringify(Object.fromEntries(headers), null, 2)}`);
   return new Response(rewrittenXML, {
     status: response.status,
     headers: headers

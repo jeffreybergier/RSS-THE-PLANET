@@ -8,6 +8,9 @@ export default {
   async fetch(request, env, ctx) {
   
     const requestURL = new URL(request.url);
+    
+    // TODO: Check for key parameter to authenticate
+    
     if (requestURL.searchParams.get('url')) {
       if (Asset.isAsset(request)) {
         return Asset.getAsset(request, env, ctx);
