@@ -12,11 +12,11 @@ export default {
     
     // TODO: Check for key parameter to authenticate
     
-    if        (Feed.getTargetURL(request))      {
+    if        (Feed.isFeed(request))            {
       return Feed.getFeed(request, env, ctx);
-    } else if (Asset.getTargetURL(request))     { 
+    } else if (Asset.isAsset(request))          { 
       return Asset.getAsset(request, env, ctx);
-    } else if (Submit.getTargetURL(request))    {
+    } else if (Submit.isSubmit(request))        {
       return Submit.getPage(request);
     }
     

@@ -1,32 +1,33 @@
+import * as Codec from './codec';
 
-export function getTargetURL(request) {
+export function isAsset(request) {
   const kConfirm = '/asset';
   const requestURL = new URL(request.url);
   const requestPath = requestURL.pathname;
-  if (!requestPath.startsWith(kConfirm)) { return null; }
-  const targetURL = requestURL.searchParams.get('url');
-  if (targetURL) { return targetURL; }
-  const targetPURL = requestURL.searchParams.get('purl');
-  if (targetPURL) {
-    try {
-      const targetPURLDecoded = decodeURIComponent(targetPURL);
-      return targetPURLDecoded;
-    } catch (e) {
-      console.error(`[asset.js] Failed to decode purl: ${targetPURL}`);
-    }
-  }
-  return null;
+  return requestPath.startsWith(kConfirm) || false;
 }
 
 export async function getAsset(request, env, ctx) {
-  const targetURL = getTargetURL(request);
-  const requestURL = new URL(request.url);
-  if (!targetURL || !requestURL) { throw `[asset.js] requestURL or targetURL was NULL`; }
+  const targetURLString = Codec.decode(request.url);
+  
+  if (!targetURLString) {
+    console.error(`[asset.js] Failed to decode URL from: ${request.url}`);
+    return new Response("Invalid Proxy Path", { status: 400 });
+  }
+  
+  const output = new Request(targetURLString, {
+    method: request.method,
+    headers: request.headers,
+    redirect: 'follow'
+  });
+  return fetch(output);
+}
 
+/*
   let response;
   try {
-    console.log(`[asset.js] fetch(${targetURL})`);
-    response = await fetch(targetURL);
+    console.log(`[asset.js] fetch(${targetURLString})`);
+    response = await fetch(targetURLString);
   } catch (error) {
     console.error(`[asset.js] fetch() ${error.message}`);
     return new Response(`[asset.js] fetch() ${error.message}`, { status: 500 });
@@ -62,3 +63,4 @@ export async function getAsset(request, env, ctx) {
   console.log(`[asset.js] return ${JSON.stringify(Object.fromEntries(output.headers), null, 2)}`);
   return output;
 }
+*/

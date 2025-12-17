@@ -1,47 +1,73 @@
+import * as Codec from './codec';
 
-export function getTargetURL(request) {
+export function isSubmit(request) {
   const kConfirm = '/submit';
   const requestURL = new URL(request.url);
   const requestPath = requestURL.pathname;
-  if (!requestPath.startsWith(kConfirm)) { return null; }
-  const targetURL = requestURL.searchParams.get('url');
-  if (targetURL) { return targetURL; }
-  return null;
+  return requestPath.startsWith(kConfirm) || false;
 }
 
 export async function getPage(request, env, ctx) {
-
-  const targetURL = getTargetURL(request);
   const requestURL = new URL(request.url);
-  if (!targetURL || !requestURL) { throw `[submit.js] requestURL or targetURL was NULL`; }
-  const proxyOrigin = requestURL.origin;
+  const targetURLString = requestURL.searchParams.get('url');
+  const encodedURL = Codec.encode(request.url, targetURLString, "/feed");
 
   const htmlContent = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Insecure XML Proxy</title>
+  <title>Proxy URL Generated</title>
   <style>
-    body { font-family: sans-serif; line-height: 1.5; max-width: 600px; margin: 20px auto; padding: 0 10px; }
-    input[type="text"], input[type="url"] { width: 100%; padding: 8px; margin: 8px 0; box-sizing: border-box; }
-    .button-container { margin-top: 10px; display: flex; gap: 10px; }
-    button { padding: 10px 20px; border: none; cursor: pointer; }
-    .btn-submit { background: #007bff; color: white; }
-    .btn-reset { background: #6c757d; color: white; }
-    code { background: #eee; padding: 2px 4px; }
+    body { font-family: sans-serif; line-height: 1.5; max-width: 600px; margin: 20px auto; padding: 0 10px; color: #333; }
+    
+    /* The Code Box */
+    textarea { 
+      width: 100%; 
+      height: 120px; 
+      padding: 12px; 
+      box-sizing: border-box; 
+      background: #282c34; 
+      color: #abb2bf; 
+      border: 1px solid #181a1f;
+      border-radius: 4px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 14px;
+      resize: none;
+    }
+
+    .button-group { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+    
+    /* Styled Link as a Button */
+    .button { 
+      padding: 10px 20px; 
+      text-decoration: none; 
+      border-radius: 4px; 
+      font-weight: bold;
+      display: inline-block;
+    }
+    
+    .btn-view { background: #28a745; color: white; }
+    .btn-back { background: #6c757d; color: white; }
+    
+    h1 { color: #007bff; }
   </style>
 </head>
 <body>
-  <h1>About</h2>
-  <p>This proxy rewrites RSS feeds to change the asset URL's to flow through the
-  proxy so that legacy computers with outdated or no TLS/SSL support can
-  subscribe to website RSS feeds and podcast RSS feeds</p>
-  <h2>Generated Proxied RSS URL</h2>
-  <p>TargetURL: ${targetURL}</p>
+  <h1>Success!</h1>
+  <p>Copy the code below for iTunes, or use the button to preview the feed in your browser:</p>
+  
+  <textarea readonly>${encodedURL || 'Error: No URL provided'}</textarea>
+
+  <div class="button-group">
+    ${encodedURL ? `<a href="${encodedURL}" class="button btn-view">View Proxy Feed</a>` : ''}
+    <a href="/" class="button btn-back">Generate Another</a>
+  </div>
+
+  <p><small style="color: #666;">Note: In Leopard, you may need to right-click the text area to "Select All" before copying.</small></p>
 </body>
 </html>
-    `;
+  `;
     
   return new Response(htmlContent, {
     headers: { "Content-Type": "text/html" },
