@@ -30,6 +30,6 @@ export async function getAsset(request, env, ctx) {
     headers: newHeaders,
     redirect: 'follow'
   });
-
+  console.log(`[asset.js] success ${targetURLString}`);
   return fetch(output);
 }
