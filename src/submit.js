@@ -12,61 +12,21 @@ export async function getPage(request, env, ctx) {
   const targetURLString = requestURL.searchParams.get('url');
   const encodedURL = Codec.encode(request.url, targetURLString, "/proxy/feed");
 
-  const htmlContent = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Proxy URL Generated</title>
-  <style>
-    body { font-family: sans-serif; line-height: 1.5; max-width: 600px; margin: 20px auto; padding: 0 10px; color: #333; }
-    
-    /* The Code Box */
-    textarea { 
-      width: 100%; 
-      height: 120px; 
-      padding: 12px; 
-      box-sizing: border-box; 
-      background: #282c34; 
-      color: #abb2bf; 
-      border: 1px solid #181a1f;
-      border-radius: 4px;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 14px;
-      resize: none;
-    }
-
-    .button-group { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
-    
-    /* Styled Link as a Button */
-    .button { 
-      padding: 10px 20px; 
-      text-decoration: none; 
-      border-radius: 4px; 
-      font-weight: bold;
-      display: inline-block;
-    }
-    
-    .btn-view { background: #28a745; color: white; }
-    .btn-back { background: #6c757d; color: white; }
-    
-    h1 { color: #007bff; }
-  </style>
-</head>
-<body>
-  <h1>Success!</h1>
-  <p>Copy the code below for iTunes, or use the button to preview the feed in your browser:</p>
-  
-  <textarea readonly>${encodedURL || 'Error: No URL provided'}</textarea>
-
-  <div class="button-group">
-    ${encodedURL ? `<a href="${encodedURL}" class="button btn-view">View Proxy Feed</a>` : ''}
-    <a href="/" class="button btn-back">Generate Another</a>
-  </div>
-
-  <p><small style="color: #666;">Note: In Leopard, you may need to right-click the text area to "Select All" before copying.</small></p>
-</body>
-</html>
+const htmlContent = `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proxy URL Generated</title>
+  </head>
+  <body>
+    <h1>Success!</h1>
+    <p>Copy the proxy URL below for use in iTunes or your RSS reader:</p>
+    <textarea rows="8" cols="40" readonly>${encodedURL || 'Error: No URL provided'}</textarea>
+    ${encodedURL ? `<br><a href="${encodedURL}">View Proxy Feed</a>` : ''}
+  </body>
+  </html>
   `;
     
   return new Response(htmlContent, {
@@ -77,42 +37,39 @@ export async function getPage(request, env, ctx) {
 
 export function getForm() {
   const htmlContent = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Insecure XML Proxy</title>
-  <style>
-    body { font-family: sans-serif; line-height: 1.5; max-width: 600px; margin: 20px auto; padding: 0 10px; }
-    input[type="text"], input[type="url"] { width: 100%; padding: 8px; margin: 8px 0; box-sizing: border-box; }
-    .button-container { margin-top: 10px; display: flex; gap: 10px; }
-    button { padding: 10px 20px; border: none; cursor: pointer; }
-    .btn-submit { background: #007bff; color: white; }
-    .btn-reset { background: #6c757d; color: white; }
-    code { background: #eee; padding: 2px 4px; }
-  </style>
-</head>
-<body>
-  <h1>About</h2>
-  <p>This proxy rewrites RSS feeds to change the asset URL's to flow through the
-  proxy so that legacy computers with outdated or no TLS/SSL support can
-  subscribe to website RSS feeds and podcast RSS feeds</p>
-  <h2>Generate Proxied RSS URL</h2>
-  <form action="/proxy/submit" method="GET">
-    <label for="key">API Key:</label>
-    <input type="text" id="key" name="key" placeholder="Your secret key" required>
-    <label for="url">Original RSS Feed URL:</label>
-    <input type="url" id="url" name="url" placeholder="https://example.com/feed.xml" required>
-    <div class="button-container">
-      <button type="reset" class="btn-reset">Reset</button>
-      <button type="submit" class="btn-submit">Generate</button>
-    </div>
-  </form>
-</body>
-</html>
-`;
-    return new Response(htmlContent, {
-      headers: { "Content-Type": "text/html" },
-      status: 200
-    });
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Insecure XML Proxy</title>
+  </head>
+  <body>
+    <h1>About</h1>
+    <p>
+      This proxy rewrites RSS feeds so that legacy computers with outdated 
+      or no TLS/SSL support can subscribe to modern website and podcast feeds.
+    </p>
+    <h2>Generate Proxied RSS URL</h2>
+    <form action="/proxy/submit" method="GET">
+      <p>
+        <label for="key">API Key:</label><br>
+        <input type="text" id="key" name="key" size="30" required>
+      </p>
+      <p>
+        <label for="url">Original RSS Feed URL:</label><br>
+        <input type="url" id="url" name="url" size="40" placeholder="https://..." required>
+      </p>
+      <p>
+        <button type="submit">Generate</button>
+        <button type="reset">Reset</button>
+      </p>
+    </form>
+  </body>
+  </html>
+  `;
+  return new Response(htmlContent, {
+    headers: { "Content-Type": "text/html" },
+    status: 200
+  });
 }
