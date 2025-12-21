@@ -2,10 +2,7 @@
 export let VALID_KEYS = null;
 
 export function AUTH_LOAD(env) {
-  if (VALID_KEYS) {
-    console.log(`[routes.auth] Preloaded: ${VALID_KEYS.size}`);
-    return;
-  }
+  if (VALID_KEYS) { return; }
   try {
     VALID_KEYS = new Set(env.VALID_KEYS);
     console.log(`[routes.auth] Loaded: ${VALID_KEYS.size}`);

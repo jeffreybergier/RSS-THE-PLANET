@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "stage": "node ./src/_node-stage.js",
-    "prod": "node ./src/_node-prod.js"
+    "start": "node ./src/_node-boot.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3"
   }
 }

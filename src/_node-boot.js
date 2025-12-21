@@ -1,8 +1,12 @@
+import 'dotenv/config';
 import http from 'node:http';
 import * as Router from './router.js';
 
 const hostname = 'localhost';
-const port = 8080;
+const port = process.env.PORT || 3000;
+const requestEnv = { 
+  VALID_KEYS: JSON.parse(process.env.VALID_KEYS || "[]") 
+};
 
 const server = http.createServer(async (req, res) => {
   // 1. Wrap the raw 'req' in a standard 'Request'
@@ -14,7 +18,7 @@ const server = http.createServer(async (req, res) => {
   });
 
   // 2. Pass it to your Cloudflare-style router
-  const webRes = await Router.route(webReq, {}, {});
+  const webRes = await Router.route(webReq, requestEnv, {});
 
   // 3. Unpack the 'Response' back to the Mac
   res.statusCode = webRes.status;
@@ -23,5 +27,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(port, hostname, () => {
-  console.log(`Server running at http://${hostname}:${port}/`);
+  if (!requestEnv || requestEnv.VALID_KEYS.length == 0) throw "[node-boot.js] 0 auth keys"
+  console.log(`[node-boot.js] Loaded auth keys: ${requestEnv.VALID_KEYS.length}`);
+  console.log(`[node-boot.js] Started server: http://${hostname}:${port}/`);
 });
