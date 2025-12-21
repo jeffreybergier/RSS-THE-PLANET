@@ -4,15 +4,14 @@ export async function getProxyResponse(request) {
 
   const requestURL = new URL(request.url);
   const route = Routes.Proxy.getRoute(requestURL.pathname);
+  const authorizedAPIKey = getAuthorizedAPIKey(requestURL.searchParams.get('key'));
     
   // Handle the submit form
   if (route === null               ) return null;
   if (route === Routes.Proxy.index ) return getSubmitForm();
   
   // Check the API Key before doing any proxying
-  const apiKey = requestURL.searchParams.get('key');
-  if (apiKey === null) return Routes.errorUnauthorized(requestURL.pathname);
-  const authorizedAPIKey = apiKey;
+  if (!authorizedAPIKey) return Routes.errorUnauthorized(requestURL.pathname);
   
   // Handle all of the other valid endpoints
   if (route === Routes.Proxy.submit) return getSubmitResult(request, authorizedAPIKey);
@@ -20,6 +19,11 @@ export async function getProxyResponse(request) {
   if (route === Routes.Proxy.asset ) return getAsset(request, authorizedAPIKey);
   
   return null;
+}
+
+function getAuthorizedAPIKey(apiKey) {
+  if (!apiKey) return null;
+  return Routes.VALID_KEYS.has(apiKey) ? apiKey : null;
 }
 
 function getSubmitForm() {
@@ -173,6 +177,7 @@ export async function getFeed(request, authorizedAPIKey) {
     return response;
   }
   
+  // TODO: Add cache-control
   const searchPattern = /(https?:\/\/[^\s"']*\.(?:jpg|jpeg|gif|png|webm|mp3|aac)[^\s"']*)/gi;
   console.log(`[proxy.feed] response.text()`);
   const originalXML = await response.text();
@@ -210,6 +215,7 @@ export async function getAsset(request, authorizedAPIKey) {
   newHeaders.delete('proxy-connection');
   newHeaders.delete('transfer-encoding');
 
+  // TODO: Add cache-control
   const output = new Request(targetURLString, {
     method: request.method,
     headers: newHeaders,
