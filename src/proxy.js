@@ -11,12 +11,13 @@ export async function getProxyResponse(request) {
   
   // Check the API Key before doing any proxying
   const apiKey = requestURL.searchParams.get('key');
-  if (apiKey === null) return Routes.errorUnauthorized(request);
+  if (apiKey === null) return Routes.errorUnauthorized(requestURL.pathname);
+  const authorizedAPIKey = apiKey;
   
-  // Handle submit form response
-  if (route === Routes.Proxy.submit) return getSubmitResult(request);
-  if (route === Routes.Proxy.feed  ) return getFeed(request);
-  if (route === Routes.Proxy.asset ) return getAsset(request);
+  // Handle all of the other valid endpoints
+  if (route === Routes.Proxy.submit) return getSubmitResult(request, authorizedAPIKey);
+  if (route === Routes.Proxy.feed  ) return getFeed(request, authorizedAPIKey);
+  if (route === Routes.Proxy.asset ) return getAsset(request, authorizedAPIKey);
   
   return null;
 }
@@ -60,15 +61,12 @@ function getSubmitForm() {
   });
 }
 
-function getSubmitResult(request) {
+function getSubmitResult(request, authorizedAPIKey) {
+  if (!authorizedAPIKey) throw "[Missing] authorizedAPIKey";
   const requestURL = new URL(request.url);
   
-  // TODO: Move this to a function parameter
-  const authorizedAPIKey = requestURL.searchParams.get('key');
-  if (authorizedAPIKey === null) return Routes.errorUnauthorized(request);
-  
   const targetURLString = requestURL.searchParams.get('url');
-  if (!targetURLString) return Routes.errorInternalServer(request);
+  if (!targetURLString) return Routes.errorInternalServer(requestURL.pathname);
   
   const encodedURL = encode(request.url, targetURLString, Routes.Proxy.feed, authorizedAPIKey);
   const htmlContent = `
@@ -150,35 +148,33 @@ function decode(requestURLString) {
   }
 }
 
-export async function getFeed(request, env, ctx) {
+export async function getFeed(request, authorizedAPIKey) {
+  if (!authorizedAPIKey) throw "[Missing] authorizedAPIKey";
+  
   const requestURL = new URL(request.url);
   const proxyOrigin = requestURL.origin;
   const targetURLString = decode(request.url);
   
-  // TODO: Move this to a function parameter
-  const authorizedAPIKey = requestURL.searchParams.get('key');
-  if (authorizedAPIKey === null) return Routes.errorUnauthorized(request);
-  
   if (!targetURLString) {
-    console.error(`[feed.js] Failed to decode URL from: ${request.url}`);
-    return Routes.errorInternalServer(request);
+    console.error(`[proxy.feed] Failed to decode URL from: ${request.url}`);
+    return Routes.errorInternalServer(requestURL.pathname);
   }
 
   let response;
   try {
     response = await fetch(targetURLString);
   } catch (error) {
-    console.error(`[feed.js] fetch() ${error.message}`);
-    return Routes.errorTargetUnreachable(request);
+    console.error(`[proxy.feed] fetch() ${error.message}`);
+    return Routes.errorTargetUnreachable(requestURL.pathname);
   }
   
   if (!response.ok) {
-    console.error(`[feed.js] fetch() response(${response.status})`);
+    console.error(`[proxy.feed] fetch() response(${response.status})`);
     return response;
   }
   
   const searchPattern = /(https?:\/\/[^\s"']*\.(?:jpg|jpeg|gif|png|webm|mp3|aac)[^\s"']*)/gi;
-  console.log(`[feed.js] response.text()`);
+  console.log(`[proxy.feed] response.text()`);
   const originalXML = await response.text();
   
   const rewrittenXML = originalXML.replace(searchPattern, (match) => {
@@ -195,12 +191,13 @@ export async function getFeed(request, env, ctx) {
   });
 }
 
-export async function getAsset(request, env, ctx) {
-  const targetURLString = decode(request.url);
-  
+export async function getAsset(request, authorizedAPIKey) {
+  if (!authorizedAPIKey) throw "[Missing] authorizedAPIKey";
+
+  const targetURLString = decode(request.url);  
   if (!targetURLString) {
-    console.error(`[asset.js] Failed to decode URL from: ${request.url}`);
-    return Routes.errorInternalServer(request);
+    console.error(`[proxy.asset] Failed to decode URL from: ${request.url}`);
+    return Routes.errorInternalServer((new URL(request.url)).pathname);
   }
 
   // Create a new Headers object from the original
@@ -218,6 +215,6 @@ export async function getAsset(request, env, ctx) {
     headers: newHeaders,
     redirect: 'follow'
   });
-  console.log(`[asset.js] success ${targetURLString}`);
+  console.log(`[proxy.asset] success ${targetURLString}`);
   return fetch(output);
 }

@@ -17,8 +17,7 @@ export const Proxy = {
 
 Object.freeze(Proxy);
 
-export function errorNotFound(request) {
-  const url = new URL(request.url); 
+export function errorNotFound(pathname) {
   const htmlContent = `
   <!DOCTYPE html>
   <html>
@@ -33,15 +32,14 @@ export function errorNotFound(request) {
     </body>
   </html>
   `;
-  console.log(`[error 404] ${url.pathname}`)
+  console.log(`[error 404] ${pathname}`)
   return new Response(htmlContent, {
     headers: { "Content-Type": "text/html" },
     status: 404
   });
 }
 
-export function errorUnauthorized(request) {
-  const url = new URL(request.url); 
+export function errorUnauthorized(pathname) {
   const htmlContent = `
   <!DOCTYPE html>
   <html>
@@ -56,15 +54,14 @@ export function errorUnauthorized(request) {
     </body>
   </html>
   `;
-  console.log(`[error 401] ${url.pathname}`)
+  console.log(`[error 401] ${pathname}`)
   return new Response(htmlContent, {
     headers: { "Content-Type": "text/html" },
     status: 401
   });
 }
 
-export function errorInternalServer(request) {
-  const url = new URL(request.url); 
+export function errorInternalServer(pathname) {
   const htmlContent = `
   <!DOCTYPE html>
   <html>
@@ -79,15 +76,14 @@ export function errorInternalServer(request) {
     </body>
   </html>
   `;
-  console.log(`[error 500] ${url.pathname}`)
+  console.log(`[error 500] ${pathname}`)
   return new Response(htmlContent, {
     headers: { "Content-Type": "text/html" },
     status: 500
   });
 }
 
-export function errorTargetUnreachable(request) {
-  const url = new URL(request.url); 
+export function errorTargetUnreachable(pathname) {
   const htmlContent = `
   <!DOCTYPE html>
   <html>
@@ -102,7 +98,7 @@ export function errorTargetUnreachable(request) {
     </body>
   </html>
   `;
-  console.log(`[error 502] ${url.pathname}`)
+  console.log(`[error 502] ${pathname}`)
   return new Response(htmlContent, {
     headers: { "Content-Type": "text/html" },
     status: 502
