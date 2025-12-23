@@ -177,14 +177,20 @@ export async function getFeed(request, authorizedAPIKey) {
     return response;
   }
   
+  // Download the feed
   // TODO: Add cache-control
-  const searchPattern = /(https?:\/\/[^\s"']*\.(?:jpg|jpeg|gif|png|webm|mp3|aac)[^\s"']*)/gi;
-  console.log(`[proxy.feed] response.text()`);
   const originalXML = await response.text();
   
-  const rewrittenXML = originalXML.replace(searchPattern, (match) => {
+  // 1. Find URLs for specific assets and replace them with /asset URLs
+  const searchPattern = /(https?:\/\/[^\s"']*\.(?:jpg|jpeg|gif|png|webm|mp3|aac)[^\s"']*)/gi;
+  var rewrittenXML = originalXML.replace(searchPattern, (match) => {
     return encode(request.url, match, Routes.Proxy.asset, authorizedAPIKey);
   });
+  
+  // 2. Find the itunes:new tag and replace it with this URL
+  const newFeedUrlPattern = /<itunes:new-feed-url>.*?<\/itunes:new-feed-url>/gi;
+  const xmlSafeURL = request.url.replace(/&/g, '&amp;');
+  rewrittenXML = rewrittenXML.replace(newFeedUrlPattern, `<itunes:new-feed-url>${xmlSafeURL}</itunes:new-feed-url>`);
   
   const headers = new Headers(response.headers);
   headers.delete('Content-Length');
