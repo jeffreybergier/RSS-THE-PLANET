@@ -1,0 +1,19 @@
+## How to run!
+
+### cd into dev directory
+### docker-compose up
+
+## Now the server is running
+## In a new terminal window you can also run wrangler commands like
+### docker-compose exec wrangler-dev npm install fast-xml-parser
+
+services:
+  wrangler-dev:
+    build: .
+    volumes:
+      - .:/app
+      - /app/node_modules # This trick keeps node_modules INSIDE the container only
+    ports:
+      - "8787:8787"
+    environment:
+      - NODE_ENV=development
