@@ -7,8 +7,9 @@ export function AUTH_LOAD(env) {
     return; 
   }
   try {
-    VALID_KEYS = new Set(env.VALID_KEYS);
+    VALID_KEYS = new Set(JSON.parse(env.VALID_KEYS));
     console.log(`[routes.auth] Loaded: ${VALID_KEYS.size}`);
+    console.log(`${VALID_KEYS}`);
   } catch (e) {
     console.error(`[routes.auth] Failed ${e.message}`);
     VALID_KEYS = new Set();

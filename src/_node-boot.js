@@ -5,7 +5,7 @@ import * as Router from './router.js';
 const hostname = 'localhost';
 const port = process.env.PORT || 3000;
 const requestEnv = { 
-  VALID_KEYS: JSON.parse(process.env.VALID_KEYS || "[]") 
+  VALID_KEYS: process.env.VALID_KEYS || "[]"
 };
 
 const server = http.createServer(async (req, res) => {
