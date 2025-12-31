@@ -9,29 +9,11 @@ export function AUTH_LOAD(env) {
   try {
     VALID_KEYS = new Set(JSON.parse(env.VALID_KEYS));
     console.log(`[routes.auth] Loaded: ${VALID_KEYS.size}`);
-    console.log(`${VALID_KEYS}`);
   } catch (e) {
     console.error(`[routes.auth] Failed ${e.message}`);
     VALID_KEYS = new Set();
   }
 }
-
-export const Proxy = {
-  index: "/proxy",
-  _index: "/proxy/",
-  submit: "/proxy/submit",
-  feed: "/proxy/feed",
-  asset: "/proxy/asset",
-  getRoute(pathname) {
-    if (pathname === this.index || pathname == this._index) return this.index;
-    if (pathname.startsWith(this.submit)) return this.submit;
-    if (pathname.startsWith(this.feed))   return this.feed;
-    if (pathname.startsWith(this.asset))  return this.asset;
-    return null;
-  }
-};
-
-Object.freeze(Proxy);
 
 export function errorNotFound(pathname) {
   const htmlContent = `

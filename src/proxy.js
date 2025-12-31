@@ -1,29 +1,87 @@
-import * as Routes from './allroutes.js';
+import * as Auth from './auth.js';
+
+export const Option = {
+  auto:  "auto",
+  feed:  "feed",
+  html:  "html",
+  asset: "asset",
+  getOption(parameter) {
+    if (typeof parameter !== 'string') return this.auto;
+    const normalized = parameter.toLowerCase();
+    const validOptions = [this.auto, this.feed, this.html, this.asset];
+    return validOptions.includes(normalized) ? normalized : this.auto;
+  },
+  async fetchAutoOption(targetURL) {
+  try {
+    let response = await fetch(targetURL, { method: 'HEAD' });
+    if (!response.ok) return null;
+    const contentType = response.headers.get("Content-Type") || "";
+    console.log(`[proxy.Option] autodetected Content-Type: ${contentType}`);
+    if (contentType.includes("xml"))  return Option.feed; 
+    if (contentType.includes("rss"))  return Option.feed;
+    if (contentType.includes("atom")) return Option.feed;
+    if (contentType.includes("html")) return Option.html;
+    return Option.asset;
+  } catch (e) {
+    console.error(`[proxy.getAuto] error: ${e.message}`);
+    return null;
+  }
+}
+};
+
+Object.freeze(Option);
 
 export async function getProxyResponse(request) {
 
+  // 0. URL Parameters
   const requestURL = new URL(request.url);
-  const route = Routes.Proxy.getRoute(requestURL.pathname);
+  const _targetURL = decode(requestURL);
+  const _submittedURL = URL.parse(requestURL.searchParams.get('url'));
+  const targetURL = (_targetURL) 
+                   ? _targetURL
+                   : _submittedURL;
+  let option = Option.getOption(requestURL.searchParams.get('option'));
+  
+  // 1.If we have no target URL, just return the submit form
+  if (!targetURL) return getSubmitForm();
+  
+  // 2. Check that we are authorized
   const authorizedAPIKey = getAuthorizedAPIKey(requestURL.searchParams.get('key'));
-    
-  // Handle the submit form
-  if (route === null               ) return null;
-  if (route === Routes.Proxy.index ) return getSubmitForm();
+  if (!authorizedAPIKey) return Auth.errorUnauthorized(requestURL.pathname);
   
-  // Check the API Key before doing any proxying
-  if (!authorizedAPIKey) return Routes.errorUnauthorized(requestURL.pathname);
+  // 3. Automatically determine option if needed
+  if (option === Option.auto) {
+    console.log(`[proxy.getProxyResponse] autodetecting: ${targetURL.toString()}`);
+    option = await Option.fetchAutoOption(targetURL);
+    console.log(`[proxy.getProxyResponse] autodetected: Option.${option}`);
+  }
   
-  // Handle all of the other valid endpoints
-  if (route === Routes.Proxy.submit) return getSubmitResult(request, authorizedAPIKey);
-  if (route === Routes.Proxy.feed  ) return getFeed(request, authorizedAPIKey);
-  if (route === Routes.Proxy.asset ) return getAsset(request, authorizedAPIKey);
+  // 4. See if someone is submitting a form for a new URL
+  if (_submittedURL) return getSubmitResult(targetURL, 
+                                            requestURL, 
+                                            option, 
+                                            authorizedAPIKey);
+
+  if (!option) return Auth.errorTargetUnreachable(targetURL.pathname); 
   
+  // 5. Go through the options and service them
+  if (option === Option.feed) return getFeed(targetURL, 
+                                             requestURL,
+                                             request.headers,
+                                             request.method, 
+                                             authorizedAPIKey);
+  if (option === Option.asset) return getAsset(targetURL, 
+                                               request.headers, 
+                                               request.method, 
+                                               authorizedAPIKey);
+  // TODO: Option.html
+
   return null;
 }
 
 function getAuthorizedAPIKey(apiKey) {
   if (!apiKey) return null;
-  return Routes.VALID_KEYS.has(apiKey) ? apiKey : null;
+  return Auth.VALID_KEYS.has(apiKey) ? apiKey : null;
 }
 
 function getSubmitForm() {
@@ -33,24 +91,37 @@ function getSubmitForm() {
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Insecure XML Proxy</title>
+    <title>Retro Mac Proxy</title>
   </head>
   <body>
-    <h1>About</h1>
+    <h2>About Retro Mac Proxy</h2>
     <p>
-      This proxy rewrites RSS feeds so that legacy computers with outdated 
-      or no TLS/SSL support can subscribe to modern website and podcast feeds.
+      This proxy server is meant for retro Macs (or other computers) that are
+      internet native and use common services such as RSS Readers or Podcast
+      players BUT suffer from TLS/SSL problems due to expired Certificate
+      Authorities or lack of modern TLS protocols.
     </p>
-    <h2>Generate Proxied RSS URL</h2>
-    <form action="${Routes.Proxy.submit}" method="GET">
+    <h2>Generate Proxy URL</h2>
+    <form action="/proxy" method="GET">
       <p>
         <label for="key">API Key:</label><br>
-        <input type="text" id="key" name="key" size="30" required>
+        <input type="text" id="key" name="key">
       </p>
       <p>
-        <label for="url">Original RSS Feed URL:</label><br>
-        <input type="url" id="url" name="url" size="40" placeholder="https://..." required>
+        <label for="url">Target URL</label><br>
+        <textarea id="url" name="url" cols="60" rows="10"></textarea>      
       </p>
+      <fieldset>
+        <legend>Proxy Mode</legend>
+        <input type="radio" id="opt-auto" name="option" value="${Option.auto}" checked>
+        <label for="opt-auto">Autodetect content-type for Target URL (slower)</label><br>
+        <input type="radio" id="opt-feed" name="option" value="${Option.feed}">
+        <label for="opt-feed">Target URL is RSS or Atom Feed</label><br>
+        <input type="radio" id="opt-html" name="option" value="${Option.html}">
+        <label for="opt-feed">Target URL is Web Page (Unimplemented)</label><br>
+        <input type="radio" id="opt-asset" name="option" value="${Option.asset}">
+        <label for="opt-asset">Target URL is binary asset such as image or audio file</label>
+      </fieldset>
       <p>
         <button type="submit">Generate</button>
         <button type="reset">Reset</button>
@@ -65,114 +136,119 @@ function getSubmitForm() {
   });
 }
 
-function getSubmitResult(request, authorizedAPIKey) {
-  if (!authorizedAPIKey) throw "[Missing] authorizedAPIKey";
-  const requestURL = new URL(request.url);
-  
-  const targetURLString = requestURL.searchParams.get('url');
-  if (!targetURLString) return Routes.errorInternalServer(requestURL.pathname);
-  
-  const encodedURL = encode(request.url, targetURLString, Routes.Proxy.feed, authorizedAPIKey);
-  const htmlContent = `
-  <!DOCTYPE html>
-  <html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Proxy URL Generated</title>
-  </head>
-  <body>
-    <h1>Success!</h1>
-    <p>Copy the proxy URL below for use in iTunes or your RSS reader:</p>
-    <textarea rows="8" cols="40" readonly>${encodedURL || 'Error: No URL provided'}</textarea>
-    ${encodedURL ? `<br><a href="${encodedURL}">View Proxy Feed</a>` : ''}
-  </body>
-  </html>
-  `;
-  return new Response(htmlContent, {
-    headers: { "Content-Type": "text/html" },
+function getSubmitResult(submittedURL, 
+                         requestURL, 
+                         option, 
+                         authorizedAPIKey) 
+{
+  if (!(submittedURL instanceof URL) 
+   || !(requestURL instanceof URL) 
+   || !authorizedAPIKey) 
+  { throw new Error("Parameter Error: submittedURL, requestURL, authorizedAPIKey"); }
+  const encodedURL = encode(submittedURL, 
+                            requestURL, 
+                            option, 
+                            authorizedAPIKey);
+  const bodyContent = `${encodedURL.toString()}`;
+  return new Response(bodyContent, {
+    headers: { "Content-Type": "text/plain" },
     status: 200
   });
 }
 
-
-function encode(requestURLString, targetURLString, endpoint, authorizedAPIKey) {
-  const requestURL = new URL(requestURLString);
-  const targetURL = new URL(targetURLString);
-  
-  if (!targetURL || !requestURL) {
-    console.error(`[proxy.encode] invalid request or target`);
-    return null;
-  }
+function encode(targetURL, 
+                requestURL, 
+                targetOption, 
+                authorizedAPIKey) 
+{  
+  if (!(targetURL  instanceof URL)
+   || !(requestURL instanceof URL)
+   || typeof authorizedAPIKey !== "string") 
+  { throw new Error("Parameter Error: targetURL, requestURL, targetOption, authorizedAPIKey"); }
   
   // get the target filename
   const pathComponents = targetURL.pathname.split('/');
-  // Filter out empty strings in case of trailing slashes
   let fileName = pathComponents.filter(Boolean).pop() || "";
   
   // encode the targetURL
-  const encodedTarget = encodeURIComponent(btoa(targetURLString));
+  const targetURI = encodeURIComponent(targetURL.toString());
+  const targetBase = btoa(targetURI);
+  const targetEncoded = encodeURIComponent(targetBase);
   
   // construct the encoded url
-  const protocol = "http://";
-  const serverOrigin = requestURL.host;
-  const encoded = `${protocol}${serverOrigin}${endpoint}/${encodedTarget}/${fileName}?key=${authorizedAPIKey}`;
+  let encodedURLString = `${requestURL.protocol}//${requestURL.host}/proxy/${targetEncoded}/${fileName}?key=${authorizedAPIKey}`;
+  if (targetOption) encodedURLString+= `&option=${targetOption}`
+  const encodedURL = new URL(encodedURLString);
   
   // TODO: Remove the excess logging
-  console.log(`[proxy.encode] ${targetURLString}`);
-  return encoded;
+  console.log(`[proxy.encode] ${targetURL.toString()}`);
+  return encodedURL;
 }
 
-function decode(requestURLString) {
-  const requestURL = new URL(requestURLString);
-  if (!requestURL) {
-    console.error(`[proxy.encode] invalid URL ${requestURLString}`);
-    return null;
-  }
+function decode(requestURL) {
+  if (!(requestURL instanceof URL)) throw new Error("Parameter Error: Invalid URL");
   
   // url.pathname ignores the query string (?key=...) 
   // so splitting this is safe from parameters.
   const pathComponents = requestURL.pathname.split('/'); 
   
-  // Path: /proxy/asset/ENCODED_STRING/file.mp3
-  // Components: ["", "asset", "ENCODED_STRING", "file.mp3"]
-  // TODO: Change this to first trim Routes.Proxy.asset before splitting
-  const encodedTarget = pathComponents[3];
-  if (!encodedTarget) {
-    console.error(`[proxy.decode] invalid pathComponents`);
-    return null;
+  // Path: /proxy/ENCODED_STRING/file.mp3
+  // Path: /proxy/ENCODED_STRING/
+  // Path: /proxy/ENCODED_STRING
+  // Components: ["", "proxy", "ENCODED_STRING", "file.mp3"]
+  const proxyIndex = pathComponents.indexOf("proxy");
+  if (proxyIndex === -1 || !pathComponents[proxyIndex + 1]) {
+    return null; 
   }
+  const targetEncoded = pathComponents[proxyIndex + 1];
 
   try {
-    const base64Encoded = decodeURIComponent(encodedTarget);
-    const targetURLString = atob(base64Encoded);
+    const targetBase = decodeURIComponent(targetEncoded);
+    const targetURI = atob(targetBase);
+    const targetURLString = decodeURIComponent(targetURI);
+    const targetURL = new URL(targetURLString);
     console.log(`[proxy.decode] ${targetURLString}`);
-    return targetURLString;
+    return targetURL;
   } catch (error) {
     console.error(`[proxy.decode] error ${error.message}`);
     return null;
   }
 }
 
-export async function getFeed(request, authorizedAPIKey) {
-  if (!authorizedAPIKey) throw "[Missing] authorizedAPIKey";
+export async function getFeed(targetURL, 
+                              requestURL,
+                             _requestHeaders,
+                              requestMethod, 
+                              authorizedAPIKey) 
+{
+  if (!(targetURL instanceof URL)
+   || !(requestURL instanceof URL)
+   || !_requestHeaders
+   || !requestMethod
+   || typeof authorizedAPIKey !== "string") 
+   { throw new Error("Parameter Error: targetURL, requestURL, requestHeaders, requestMethod, authorizedAPIKey"); }
   
-  const requestURL = new URL(request.url);
-  const proxyOrigin = requestURL.origin;
-  const targetURLString = decode(request.url);
-  const xmlSafeURL = request.url.replace(/&/g, '&amp;');
-  
-  if (!targetURLString) {
-    console.error(`[proxy.feed] Failed to decode URL from: ${request.url}`);
-    return Routes.errorInternalServer(requestURL.pathname);
+  let requestHeaders = sanitized(_requestHeaders);
+  if (requestMethod !== "GET") {
+    // Bail out immediately if we are 
+    // not proxying a normal GET request
+    return fetch(targetURL, {
+      method: requestMethod,
+      headers: requestHeaders,
+      redirect: 'follow'
+    });
   }
-
+  
   let response;
   try {
-    response = await fetch(targetURLString);
+    response = await fetch(targetURL, {
+      method: requestMethod,
+      headers: requestHeaders,
+      redirect: 'follow'
+    });
   } catch (error) {
-    console.error(`[proxy.feed] fetch() ${error.message}`);
-    return Routes.errorTargetUnreachable(requestURL.pathname);
+    console.error(`[proxy.feed] fetch() ${error.message}`, error.cause || '');
+    return Auth.errorTargetUnreachable(requestURL.pathname);
   }
   
   if (!response.ok) {
@@ -187,54 +263,89 @@ export async function getFeed(request, authorizedAPIKey) {
   // 1. Find URLs for specific assets and replace them with /asset URLs
   const searchPattern = /(https?:\/\/[^\s"'<>]*\.(?:jpg|jpeg|gif|png|webm|mp3|aac)[^\s"'<>]*)/gi;
   var rewrittenXML = originalXML.replace(searchPattern, (match) => {
-    return encode(request.url, match, Routes.Proxy.asset, authorizedAPIKey);
+    try {
+      const matchURL = new URL(match);
+      const encodedURL = encode(matchURL, 
+                                requestURL,
+                                Option.asset, 
+                                authorizedAPIKey);
+      const encodedXMLSafe = encodedURL.toString().replace(/&/g, '&amp;');
+      return encodedXMLSafe;
+    } catch (e) {
+      console.error(`[proxy.feed] error: ${e.message})`);
+      return match;
+    }
   });
   
   // 2. Find the itunes:new tag and replace it with this URL
+  const requestURLXML = requestURL.toString().replace(/&/g, '&amp;');
   const newFeedUrlPattern = /<itunes:new-feed-url>.*?<\/itunes:new-feed-url>/i;
-  rewrittenXML = rewrittenXML.replace(newFeedUrlPattern, `<itunes:new-feed-url>${xmlSafeURL}</itunes:new-feed-url>`);
+  rewrittenXML = rewrittenXML.replace(newFeedUrlPattern, `<itunes:new-feed-url>${requestURLXML}</itunes:new-feed-url>`);
   
   // 3. Find RSS ATOM self URL
   const atomSelfPattern = /<link\s+rel="self"\s+type="([^"]+)"\s+href="[^"]+"\s*\/>/i;
   rewrittenXML = rewrittenXML.replace(atomSelfPattern, (match, type) => {
-    return `<link rel="self" type="${type}" href="${xmlSafeURL}" />`;
+    return `<link rel="self" type="${type}" href="${requestURLXML}" />`;
   });
   
-  const headers = new Headers(response.headers);
-  headers.delete('Content-Length');
-  headers.delete('Content-Encoding');
+  const responseHeaders = new Headers(response.headers);
+  responseHeaders.set('Content-Type', 'application/rss+xml; charset=utf-8');
+  responseHeaders.delete('Content-Length');
+  responseHeaders.delete('Content-Encoding');
   
   return new Response(rewrittenXML, {
     status: response.status,
-    headers: headers
+    headers: responseHeaders
   });
 }
 
-export async function getAsset(request, authorizedAPIKey) {
-  if (!authorizedAPIKey) throw "[Missing] authorizedAPIKey";
-
-  const targetURLString = decode(request.url);  
-  if (!targetURLString) {
-    console.error(`[proxy.asset] Failed to decode URL from: ${request.url}`);
-    return Routes.errorInternalServer((new URL(request.url)).pathname);
-  }
-
-  // Create a new Headers object from the original
-  const newHeaders = new Headers(request.headers);
-
-  // Remove headers that cause Undici/fetch to crash or behave incorrectly
-  newHeaders.delete('connection');
-  newHeaders.delete('keep-alive');
-  newHeaders.delete('host');
-  newHeaders.delete('proxy-connection');
-  newHeaders.delete('transfer-encoding');
-
+function getAsset(targetURL, 
+                  requestHeaders, 
+                  requestMethod, 
+                  authorizedAPIKey) 
+{
+  if (!(targetURL instanceof URL)
+   || !requestHeaders
+   || !requestMethod
+   || typeof authorizedAPIKey !== "string") 
+   { throw new Error("Parameter Error: targetURL, requestHeaders, requestMethod, authorizedAPIKey"); }
+   
+   const headers = sanitized(requestHeaders);
+   console.log(`[proxy.asset] passing through: ${targetURL.toString()}`);
+   
   // TODO: Add cache-control
-  const output = new Request(targetURLString, {
-    method: request.method,
-    headers: newHeaders,
+  return fetch(targetURL, {
+    method: requestMethod,
+    headers: headers,
     redirect: 'follow'
   });
-  console.log(`[proxy.asset] success ${targetURLString}`);
-  return fetch(output);
+}
+
+function sanitized(incomingHeaders) {
+  const forbidden = [
+    'host',
+    'connection',
+    'keep-alive',
+    'proxy-authenticate',
+    'proxy-authorization',
+    'te',
+    'trailer',
+    'transfer-encoding',
+    'upgrade',
+    'content-length'
+  ];
+
+  const headers = new Headers();
+  for (const [key, value] of incomingHeaders.entries()) {
+    if (!forbidden.includes(key.toLowerCase())) {
+      headers.set(key, value);
+    }
+  }
+  
+  // Optional: Set a User-Agent so sites don't block you as a bot
+  if (!headers.has('user-agent')) {
+    headers.set('User-Agent', 'Overcast/3.0 (+http://overcast.fm/; iOS podcast app)');
+  }
+
+  return headers;
 }
