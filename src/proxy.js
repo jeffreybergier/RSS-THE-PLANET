@@ -1,4 +1,5 @@
 import * as Auth from './auth.js';
+import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
 export const Option = {
   auto:  "auto",
@@ -239,64 +240,203 @@ export async function getFeed(targetURL,
     });
   }
   
-  let response;
   try {
-    response = await fetch(targetURL, {
+    // 1. Download the original feed
+    const response = await fetch(targetURL, {
       method: requestMethod,
       headers: requestHeaders,
       redirect: 'follow'
     });
+    if (!response.ok) {
+      console.error(`[proxy.feed] fetch() response(${response.status})`);
+      return response;
+    }
+    const originalXML = await response.text();
+    
+    // 2. Create the XML Parser
+    const parser = new XMLParser({ 
+      ignoreAttributes: false, 
+      attributeNamePrefix: "@_",
+      parseTagValue: false,
+      cdataPropName: "__cdata"
+    });
+    const builder = new XMLBuilder({ 
+      ignoreAttributes: false, 
+      format: true,
+      suppressEmptyNode: true,
+      cdataPropName: "__cdata"
+    });
+    
+    let xml = parser.parse(originalXML);
+    const rssChannel = xml.rss?.channel;
+    if (rssChannel) {
+      // 3 Patch the Channel
+      if (!Array.isArray(rssChannel.item)) rssChannel.item = (rssChannel.item) 
+                                                           ? [rssChannel.item] 
+                                                           : [];
+      // 3.1 Replace itunes:new-feed-url
+      const itNewURL = URL.parse(rssChannel["itunes:new-feed-url"]);
+      if (itNewURL) rssChannel["itunes:new-feed-url"] = encode(itNewURL, 
+                                                               requestURL, 
+                                                               Option.feed,
+                                                               authorizedAPIKey)
+                                                              .toString();
+      
+      // 3.2 Replace itunes:image
+      const itImageURL = URL.parse(rssChannel["itunes:image"]?.["@_href"]);
+      if (itImageURL) rssChannel["itunes:image"]["@_href"] = encode(itImageURL, 
+                                                                    requestURL, 
+                                                                    Option.asset,
+                                                                    authorizedAPIKey)
+                                                                   .toString();
+      // 3.3 Replace Link
+      const linkURL = URL.parse(rssChannel.link);
+      if (linkURL) rssChannel.link = encode(linkURL, 
+                                            requestURL, 
+                                            Option.asset,
+                                            authorizedAPIKey)
+                                           .toString();
+      // 3.4 Replace Link
+      // TODO: Investigate what to do if there multiples of these
+      const selfLink = (rssChannel["atom:link"]?.["@_rel"] === "self")
+                      ? rssChannel["atom:link"]
+                      : null;
+      const selfLinkURL = URL.parse(selfLink?.["@_href"]);
+      if (selfLinkURL) rssChannel["atom:link"]["@_href"] = encode(selfLinkURL, 
+                                                                  requestURL, 
+                                                                  Option.feed,
+                                                                  authorizedAPIKey)
+                                                                 .toString();
+      
+      
+      // 3.5 Remove items over 1 year old
+      const timelimit = new Date();
+      timelimit.setFullYear(timelimit.getFullYear() - 1);
+      rssChannel.item = rssChannel.item.filter(item => {
+        const pubDate = new Date(item.pubDate);
+        return pubDate > timelimit;
+      });
+      
+      // 4 Patch each item in the channel
+      rssChannel.item.forEach(item => {
+        // 4.1 Replace the Link property
+        const linkURL = URL.parse(item.link);
+        if (linkURL) item.link = encode(linkURL, 
+                                        requestURL, 
+                                        Option.html,
+                                        authorizedAPIKey)
+                                       .toString();
+        // 4.2 Replace the itunes image url
+        const itImageURL = URL.parse(item["itunes:image"]?.["@_href"]);
+        if (itImageURL) item["itunes:image"]["@_href"] = encode(itImageURL, 
+                                                                requestURL, 
+                                                                Option.asset,
+                                                                authorizedAPIKey)
+                                                               .toString();
+        // 4.3 Replace enclosure url
+        const enclosureURL = URL.parse(item.enclosure?.["@_url"]);
+        if (enclosureURL) item.enclosure["@_url"] = encode(enclosureURL, 
+                                                           requestURL, 
+                                                           Option.asset,
+                                                           authorizedAPIKey)
+                                                          .toString();
+        // 4.4 TODO: Edit the Content tag as if it were HTML
+      });
+    }
+    
+    const rssFeed = xml.feed;
+    if (rssFeed) {
+      // 5 Patch the RSS feed
+      if (!Array.isArray(rssFeed.entry)) rssFeed.entry = (rssFeed.entry) 
+                                                       ? [rssFeed.entry] 
+                                                       : [];
+      if (!Array.isArray(rssFeed.link)) rssFeed.link = (rssFeed.link) 
+                                                     ? [rssFeed.link] 
+                                                     : [];
+
+      // 5.1 Proxy all of the link references
+      rssFeed.link.forEach(link => {
+        const linkURL = URL.parse(link["@_href"]);
+        if (!linkURL) return;
+        let option = Option.auto;
+        console.log(`TEMP ${JSON.stringify(link)}`)
+        if (link["@_type"]?.toLowerCase().includes("html" )) option = Option.html;
+        if (link["@_type"]?.toLowerCase().includes("xml"  )) option = Option.feed;
+        if (link["@_type"]?.toLowerCase().includes("rss"  )) option = Option.feed;
+        if (link["@_type"]?.toLowerCase().includes("atom" )) option = Option.feed;
+        if (link["@_type"]?.toLowerCase().includes("audio")) option = Option.asset;
+        if (link["@_type"]?.toLowerCase().includes("image")) option = Option.asset;
+        link["@_href"] = encode(linkURL, 
+                                requestURL, 
+                                option,
+                                authorizedAPIKey)
+                               .toString();
+      });
+      
+      // 5.2 replace logo and icon which are in the spec
+      const logoURL = URL.parse(rssFeed.logo);
+      if (logoURL) rssFeed.logo = encode(logoURL, 
+                                         requestURL, 
+                                         Option.asset,
+                                         authorizedAPIKey)
+                                        .toString();
+      const iconURL = URL.parse(rssFeed.icon);
+      if (iconURL) rssFeed.icon = encode(iconURL, 
+                                         requestURL, 
+                                         Option.asset,
+                                         authorizedAPIKey)
+                                        .toString();
+      // 5.3 Remove items over 1 month old
+      const timelimit = new Date();
+      timelimit.setMonth(timelimit.getMonth() - 1);
+      rssFeed.entry = rssFeed.entry.filter(item => {
+        const updated = new Date(item.updated);
+        return updated > timelimit;
+      });
+      
+      // 5.4 Patch each link entry
+      rssFeed.entry.forEach(entry => {
+        if (!Array.isArray(entry.link)) entry.link = (entry.link) 
+                                                   ? [entry.link] 
+                                                   : [];
+                                                   
+        entry.link.forEach(link => {
+          const linkURL = URL.parse(link["@_href"]);
+          if (!linkURL) return;
+          let option = Option.auto;
+          console.log(`TEMP ${JSON.stringify(link)}`)
+          if (link["@_type"]?.toLowerCase().includes("html" )) option = Option.html;
+          if (link["@_type"]?.toLowerCase().includes("xml"  )) option = Option.feed;
+          if (link["@_type"]?.toLowerCase().includes("rss"  )) option = Option.feed;
+          if (link["@_type"]?.toLowerCase().includes("atom" )) option = Option.feed;
+          if (link["@_type"]?.toLowerCase().includes("audio")) option = Option.asset;
+          if (link["@_type"]?.toLowerCase().includes("image")) option = Option.asset;
+          link["@_href"] = encode(linkURL, 
+                                  requestURL, 
+                                  option,
+                                  authorizedAPIKey)
+                                 .toString();
+        });
+        
+        // 5.5 TODO: Edit the Content tag as if it were HTML
+      });
+    }
+
+    // 4. Return the modified XML Response
+    const rewrittenXML = builder.build(xml);
+    
+    const responseHeaders = new Headers(response.headers);
+    responseHeaders.delete('Content-Length');
+    responseHeaders.delete('Content-Encoding');
+    
+    return new Response(rewrittenXML, {
+      status: response.status,
+      headers: responseHeaders
+    });
   } catch (error) {
-    console.error(`[proxy.feed] fetch() ${error.message}`, error.cause || '');
+    console.error(`[proxy.feed] fetch() ${error.message}`);
     return Auth.errorTargetUnreachable(requestURL.pathname);
   }
-  
-  if (!response.ok) {
-    console.error(`[proxy.feed] fetch() response(${response.status})`);
-    return response;
-  }
-  
-  // Download the feed
-  // TODO: Add cache-control
-  const originalXML = await response.text();
-  
-  // 1. Find URLs for specific assets and replace them with /asset URLs
-  const searchPattern = /(https?:\/\/[^\s"'<>]*\.(?:jpg|jpeg|gif|png|webm|mp3|aac)[^\s"'<>]*)/gi;
-  var rewrittenXML = originalXML.replace(searchPattern, (match) => {
-    try {
-      const matchURL = new URL(match);
-      const encodedURL = encode(matchURL, 
-                                requestURL,
-                                Option.asset, 
-                                authorizedAPIKey);
-      const encodedXMLSafe = encodedURL.toString().replace(/&/g, '&amp;');
-      return encodedXMLSafe;
-    } catch (e) {
-      console.error(`[proxy.feed] error: ${e.message})`);
-      return match;
-    }
-  });
-  
-  // 2. Find the itunes:new tag and replace it with this URL
-  const requestURLXML = requestURL.toString().replace(/&/g, '&amp;');
-  const newFeedUrlPattern = /<itunes:new-feed-url>.*?<\/itunes:new-feed-url>/i;
-  rewrittenXML = rewrittenXML.replace(newFeedUrlPattern, `<itunes:new-feed-url>${requestURLXML}</itunes:new-feed-url>`);
-  
-  // 3. Find RSS ATOM self URL
-  const atomSelfPattern = /<link\s+rel="self"\s+type="([^"]+)"\s+href="[^"]+"\s*\/>/i;
-  rewrittenXML = rewrittenXML.replace(atomSelfPattern, (match, type) => {
-    return `<link rel="self" type="${type}" href="${requestURLXML}" />`;
-  });
-  
-  const responseHeaders = new Headers(response.headers);
-  responseHeaders.set('Content-Type', 'application/rss+xml; charset=utf-8');
-  responseHeaders.delete('Content-Length');
-  responseHeaders.delete('Content-Encoding');
-  
-  return new Response(rewrittenXML, {
-    status: response.status,
-    headers: responseHeaders
-  });
 }
 
 function getAsset(targetURL, 

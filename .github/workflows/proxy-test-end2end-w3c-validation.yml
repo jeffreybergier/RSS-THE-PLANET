@@ -5,13 +5,6 @@ on:
     branches: [ main, prod ]
   pull_request:
     branches: [ main, prod ]
-# on: 
-#   workflow_dispatch:
-#     inputs:
-#       reason:
-#         description: 'Disabled until refactor'
-#         required: false
-#         default: 'Manual update'
 
 jobs:
   proxy-test-end2end-w3c-validation:
@@ -24,15 +17,13 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # Matches modern standards
+          node-version: '20'
           cache: 'npm'
 
       - name: Install Dependencies
         run: npm install
 
       - name: Start Proxy Server
-        # We use '&' to run the server in the background so the action can continue
-        # We also wait a few seconds for the server to actually boot up
         run: |
           npm start & 
           sleep 5 
@@ -44,7 +35,6 @@ jobs:
           curl --silent --fail http://localhost:3000/proxy > /dev/null || exit 1
           echo "Proxy Server is up and reachable!"
 
-      # This is where you will eventually put your CI validation script
       - name: Run Feed Comparison Tests
         run: |
           echo "Starting W3C Validation Comparison..."
