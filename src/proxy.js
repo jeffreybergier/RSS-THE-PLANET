@@ -330,7 +330,13 @@ export async function getFeed(targetURL,
     
     let xml = parser.parse(originalXML);
     const rssChannel = xml.rss?.channel;
+    
     // 3 Patch the Channel
+    // Delete any stylesheet
+    // TODO: Learn how to resolve relative URL's in order to fix
+    // <?xml-stylesheet type="text/xsl" media="screen" href="/~files/atom-premium.xsl"?>
+    // https://feeds.allenpike.com/feed/
+    if (xml["?xml-stylesheet"]) delete xml["?xml-stylesheet"];
     if (rssChannel) {
       // 3.1 Replace itunes:new-feed-url
       XML_encodeURL(rssChannel, "itunes:new-feed-url", Option.feed);
@@ -343,10 +349,13 @@ export async function getFeed(targetURL,
         return parent["@_rel"] === "self";
       });
       // 3.5 Replace the channel image
-      if (rssChannel.image) {
-        XML_encodeURL(rssChannel.image, "url", Option.asset);
-        XML_encodeURL(rssChannel.image, "link", Option.auto);
-      }
+      if (!Array.isArray(rssChannel.image)) rssChannel.image = (rssChannel.image) 
+                                                             ? [rssChannel.image] 
+                                                             : [];
+      rssChannel.image.forEach(image => {
+        XML_encodeURL(image, "url", Option.asset);
+        XML_encodeURL(image, "link", Option.auto);
+      });
       // 3.6 Remove items over 1 year old
       rssChannel.item = rssChannel.item.filter(item => {
         const pubDate = new Date(item.pubDate);
@@ -385,6 +394,7 @@ export async function getFeed(targetURL,
         if (link["@_type"]?.toLowerCase().includes("atom" )) option = Option.feed;
         if (link["@_type"]?.toLowerCase().includes("audio")) option = Option.asset;
         if (link["@_type"]?.toLowerCase().includes("image")) option = Option.asset;
+        if (link["@_rel" ]?.toLowerCase().includes("self" )) option = Option.feed;
         link["@_href"] = encode(linkURL, 
                                 requestURL, 
                                 option,

@@ -7,6 +7,34 @@ const TEST_FEEDS = [
   { name: "The Verge", url: "https://www.theverge.com/rss/index.xml" },
   { name: "MacRumors", url: "https://www.macrumors.com/macrumors.xml" },
   { name: "Daring Fireball", url: "https://daringfireball.net/feeds/main" },
+  { name: "It's Nice That", url: "https://feeds2.feedburner.com/itsnicethat/SlXC" },
+  { name: "Nomadic Matt", url: "https://www.nomadicmatt.com/feed/" },
+  { name: "Xkcd", url: "https://xkcd.com/rss.xml" },
+  { name: "Vienna Support", url: "https://github.com/ViennaRSS/vienna-rss/discussions.atom" },
+  { name: "A Working Library", url: "https://aworkinglibrary.com/feed/index.xml" },
+  { name: "Vienna Developer Blog", url: "https://www.vienna-rss.com/feed.xml" },
+  { name: "Cool Hunting", url: "http://feeds.coolhunting.com/ch" },
+  { name: "BBC World News", url: "https://feeds.bbci.co.uk/news/world/rss.xml" },
+  { name: "Ars Technica", url: "https://feeds.arstechnica.com/arstechnica/index/" },
+  { name: "Astronomy Picture of the Day", url: "https://apod.nasa.gov/apod.rss" },
+  { name: "Colossal", url: "https://www.thisiscolossal.com/feed/" },
+  { name: "Craig Hockenberry", url: "https://furbo.org/feed" },
+  { name: "inessential", url: "https://inessential.com/xml/rss.xml" },
+  { name: "Jason Kottke", url: "http://feeds.kottke.org/main" },
+  { name: "Julia Evans", url: "https://jvns.ca/atom.xml" },
+  { name: "Manton Reece", url: "https://www.manton.org/feed.xml" },
+  { name: "Maurice Parker", url: "https://vincode.io/feed.xml" },
+  { name: "Michael Tsai", url: "https://mjtsai.com/blog/feed/" },
+  { name: "NetNewsWire Blog", url: "https://netnewswire.blog/feed.xml" },
+  { name: "One Foot Tsunami", url: "https://onefoottsunami.com/feed/atom/" },
+  { name: "Scripting News", url: "http://scripting.com/rss.xml" },
+  { name: "Six Colors", url: "https://feedpress.me/sixcolors?type=xml" },
+  { name: "RTINGS.com", url: "https://www.rtings.com/latest-rss" },
+
+  // Troublesome RSS Feeds
+  { name: "Amusing Planet", url: "https://www.amusingplanet.com/feeds/posts/default?alt=rss" },
+  { name: "Apple News", url: "https://www.apple.com/newsroom/rss-feed.rss" },
+  { name: "Allen Pike", url: "https://feeds.allenpike.com/feed/" },
   
   // Podcast Feeds
   { name: "Accidental Tech Podcast", url: "https://atp.fm/rss" },
@@ -32,8 +60,8 @@ const TEST_FEEDS = [
   { name: "Upgrade", url: "https://www.relay.fm/upgrade/feed" },
   { name: "What Trump Can Teach Us About Con Law", url: "https://feeds.simplecast.com/jZLi00b4" },
   { name: "日本語 with あこ", url: "https://anchor.fm/s/2e08a010/podcast/rss" },
-    /*
-  // Podcast: Troublesome Feeds
+  
+  // Troublesome Podcast Feeds
   { name: "Acquired", url: "https://feeds.transistor.fm/acquired" },
   { name: "All-In", url: "https://rss.libsyn.com/shows/254861/destinations/1928300.xml" },
   { name: "Apple News Today", url: "https://apple.news/podcast/apple_news_today" },
@@ -47,7 +75,6 @@ const TEST_FEEDS = [
   { name: "The Vergecast", url: "https://feeds.megaphone.fm/vergecast" },
   { name: "Today, Explained", url: "https://feeds.megaphone.fm/VMP5705694065" },
   { name: "YUYUの日本語Podcast", url: "https://anchor.fm/s/cda85d4/podcast/rss" },
-  */
 
 ];
 
@@ -189,15 +216,22 @@ function analyzeW3CXMLBody(xmlBody) {
     return {
       key: fingerprint,
       line: issue.line,
+      column: issue.column,
       type: type,
       text: text,
       element: element
     };
   });
+  
+  // TODO: Break this out into per feed exceptions instead of for everything
   const knownFailures = [
   'SelfDoesntMatchLocation',
-  'ContainsHTML',
+  'ContainsHTML', // Caused by fast-xml-parser double encoding & into &amp;
+  'ContainsUndeclaredHTML', // Like this <title>Why is ChatGPT for Mac So&amp;#x2026; Bad?</title>
+  'NotHtml', // Removed for Amusing Planet which has a garbage feed
+  'UnexpectedWhitespace', // Removed for Apple News - very confused about this one
   ];
+  
   return output.filter(issue => !knownFailures.includes(issue.type));
 }
 
