@@ -1,19 +1,14 @@
-## How to run!
+## To run the wrangler server for the first
+## docker-compose up --build
 
-### cd into dev directory
-### docker-compose up
+## To run wrangler the nth time
+## docker-compose up
 
-## Now the server is running
-## In a new terminal window you can also run wrangler commands like
-### docker-compose exec wrangler-dev npm install fast-xml-parser
+## To run the OPML Gen Script (requires the wrangler server to be running)
+## docker-compose exec wrangler-dev node --env-file=.dev.vars tests/proxy-test-opml-generator.js
 
-## To Login Run
-### docker-compose exec wrangler-dev npx wrangler login
-
-## Paste the URL into browser and auth
-## Login will fail because safari can't access the docker for login
-## Copy the URL and then in another terminal run
-### docker-compose exec wrangler-dev curl "INSERT URL HERE"
+## To install a new package (requires the wrangler server to be running)
+## docker-compose exec wrangler-dev npm install some-new-package
 
 services:
   wrangler-dev:

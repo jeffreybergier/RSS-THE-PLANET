@@ -3,3 +3,4 @@
 node_modules/*
 /.wrangler
 /.dev.vars
+/tests/proxy-test-feeds-generated.opml
