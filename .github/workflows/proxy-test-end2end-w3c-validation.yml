@@ -3,6 +3,7 @@ name: proxy-test-end2end-w3c-validation
 on:
   pull_request:
     branches: [ prod ]
+  workflow_dispatch: # Allows manual trigger from GitHub UI
 
 jobs:
   proxy-test-end2end-w3c-validation:

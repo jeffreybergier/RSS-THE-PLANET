@@ -177,6 +177,8 @@ function encode(targetURL,
   const targetEncoded = encodeURIComponent(targetBase);
   
   // construct the encoded url
+  // TODO: replace requestURL with baseURL and then use JS constructor to append path properly
+  // https://developer.mozilla.org/en-US/docs/Web/API/URL_API/Resolving_relative_references
   let encodedURLString = `${requestURL.protocol}//${requestURL.host}/proxy/${targetEncoded}/${fileName}?key=${authorizedAPIKey}`;
   if (targetOption) encodedURLString+= `&option=${targetOption}`
   const encodedURL = new URL(encodedURLString);
