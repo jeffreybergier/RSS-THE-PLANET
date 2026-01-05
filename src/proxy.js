@@ -40,6 +40,7 @@ export async function getProxyResponse(request) {
 
   // 0. URL Parameters
   const requestURL = new URL(request.url);
+  const baseURL = new URL(Auth.PROXY_VALID_PATH, requestURL.origin);
   const _targetURL = decode(requestURL);
   const _submittedURL = URL.parse(requestURL.searchParams.get('url'));
   const targetURL = (_targetURL) 
@@ -63,7 +64,7 @@ export async function getProxyResponse(request) {
   
   // 4. See if someone is submitting a form for a new URL
   if (_submittedURL) return getSubmitResult(targetURL, 
-                                            requestURL, 
+                                            baseURL, 
                                             option, 
                                             authorizedAPIKey);
 
@@ -71,7 +72,7 @@ export async function getProxyResponse(request) {
   
   // 5. Go through the options and service them
   if (option === Option.feed) return getFeed(targetURL, 
-                                             requestURL,
+                                             baseURL,
                                              request.headers,
                                              request.method, 
                                              authorizedAPIKey);
@@ -142,16 +143,16 @@ function getSubmitForm() {
 }
 
 function getSubmitResult(submittedURL, 
-                         requestURL, 
+                         baseURL, 
                          option, 
                          authorizedAPIKey) 
 {
   if (!(submittedURL instanceof URL) 
-   || !(requestURL instanceof URL) 
+   || !(baseURL instanceof URL) 
    || !authorizedAPIKey) 
-  { throw new Error("Parameter Error: submittedURL, requestURL, authorizedAPIKey"); }
+  { throw new Error("Parameter Error: submittedURL, baseURL, authorizedAPIKey"); }
   const encodedURL = encode(submittedURL, 
-                            requestURL, 
+                            baseURL, 
                             option, 
                             authorizedAPIKey);
   const bodyContent = `${encodedURL.toString()}`;
@@ -162,17 +163,17 @@ function getSubmitResult(submittedURL,
 }
 
 async function getFeed(targetURL, 
-                       requestURL,
+                       baseURL,
                       _requestHeaders,
                        requestMethod, 
                        authorizedAPIKey) 
 {
   if (!(targetURL instanceof URL)
-   || !(requestURL instanceof URL)
+   || !(baseURL instanceof URL)
    || !_requestHeaders
    || !requestMethod
    || typeof authorizedAPIKey !== "string") 
-   { throw new Error("Parameter Error: targetURL, requestURL, requestHeaders, requestMethod, authorizedAPIKey"); }
+   { throw new Error("Parameter Error: targetURL, baseURL, requestHeaders, requestMethod, authorizedAPIKey"); }
   
   let requestHeaders = sanitizedRequestHeaders(_requestHeaders);
   if (requestMethod !== "GET") {
@@ -200,7 +201,10 @@ async function getFeed(targetURL,
     
     // Download and Rewrite XML
     const originalXML = await response.text();
-    const rewrittenXML = rewriteFeedXML(originalXML, requestURL, authorizedAPIKey);
+    const rewrittenXML = rewriteFeedXML(originalXML, 
+                                        targetURL, 
+                                        baseURL, 
+                                        authorizedAPIKey);
     
     // Return Response
     const rewrittenXMLSize = new TextEncoder().encode(rewrittenXML).length;
@@ -214,7 +218,7 @@ async function getFeed(targetURL,
     });
   } catch (error) {
     console.error(`[proxy.feed] fetch() ${error.message}`);
-    return Auth.errorTargetUnreachable(requestURL.pathname);
+    return Auth.errorTargetUnreachable(targetURL.pathname);
   }
 }
 
@@ -244,7 +248,33 @@ function getAsset(targetURL,
 
 // MARK: Model (Testable)
 
-export function rewriteFeedXML(originalXML, requestURL, authorizedAPIKey) {
+export function rewriteFeedXML(originalXML, 
+                               targetURL, 
+                               baseURL, 
+                               authorizedAPIKey) 
+{
+
+  function XML_rewriteEntryHTML(entry) {
+    [
+      "description",       // RSS 2.0 Summary/Content
+      "content:encoded",   // RSS 2.0 Full Content
+      "content",           // Atom Full Content
+      "summary"            // Atom Summary
+    ].forEach(field => {
+      if (!entry[field]) return;
+      const isCDATA = (typeof entry[field] === "object" && entry[field]["__cdata"]) ;
+      const originalHTML = isCDATA ? entry[field]["__cdata"] : entry[field]
+      let rewrittenHTML = rewriteHTML(originalHTML,
+                                      targetURL, 
+                                      baseURL, 
+                                      authorizedAPIKey);
+      if (isCDATA) {
+        entry[field]["__cdata"] = rewrittenHTML;
+      } else {
+        entry[field] = rewrittenHTML;
+      }
+    });
+  }
 
   function XML_encodeURL(parent, key, option, where) {
     if (!parent || !parent[key]) return;
@@ -253,7 +283,7 @@ export function rewriteFeedXML(originalXML, requestURL, authorizedAPIKey) {
     if (Array.isArray(target)) {
       target.forEach((_, index) => {
         // We pass the array as the parent and the index as the key
-        X_setURL(target, index, option, where);
+        XML_encodeURL(target, index, option, where);
       });
       return;
     }
@@ -270,7 +300,7 @@ export function rewriteFeedXML(originalXML, requestURL, authorizedAPIKey) {
     const rawValueURL = URL.parse(rawValue.trim());
     if (!rawValueURL) return;
     // 5. Encode
-    const resultURL = encode(rawValueURL, requestURL, option, authorizedAPIKey);
+    const resultURL = encode(rawValueURL, baseURL, option, authorizedAPIKey);
     if (!(resultURL instanceof URL)) return;
     const finalString = resultURL.toString();
     // 6. Re-wrap in original format
@@ -279,10 +309,10 @@ export function rewriteFeedXML(originalXML, requestURL, authorizedAPIKey) {
       : finalString;
   }
   
-  if (!(requestURL instanceof URL)
+  if (!(baseURL instanceof URL)
    || typeof originalXML !== "string"
    || typeof authorizedAPIKey !== "string") 
-  { throw new Error("Parameter Error: requestURL, originalXML, authorizedAPIKey"); }
+  { throw new Error("Parameter Error: baseURL, originalXML, authorizedAPIKey"); }
 
 
   // 1. Set time limit for articles
@@ -329,24 +359,25 @@ export function rewriteFeedXML(originalXML, requestURL, authorizedAPIKey) {
       XML_encodeURL(image, "url", Option.asset);
       XML_encodeURL(image, "link", Option.auto);
     });
-    // 3.6 Remove items over 1 year old
-    rssChannel.item = rssChannel.item.filter(item => {
-      const pubDate = new Date(item.pubDate);
-      return pubDate > timelimit;
-    });
     
     // 4 Patch each item in the channel
     if (!Array.isArray(rssChannel.item)) rssChannel.item = (rssChannel.item) 
                                                    ? [rssChannel.item] 
                                                    : [];
+    // 4.1 Remove items older than the time limit
+    rssChannel.item = rssChannel.item.filter(item => {
+      const pubDate = new Date(item.pubDate);
+      return pubDate > timelimit;
+    });
     rssChannel.item.forEach(item => {
-      // 4.1 Replace the Link property
+      // 4.2 Replace the Link property
       XML_encodeURL(item, "link", Option.auto);
-      // 4.2 Replace the itunes image url
+      // 4.3 Replace the itunes image url
       XML_encodeURL(item["itunes:image"], "@_href", Option.asset);
-      // 4.3 Replace enclosure url
+      // 4.4 Replace enclosure url
       XML_encodeURL(item.enclosure, "@_url", Option.asset);
-      // 4.4 TODO: Edit the Content tag as if it were HTML
+      // 4.5 Rewrite the HTML in summaries and descriptions
+      XML_rewriteEntryHTML(item);
     });
   }
   
@@ -369,7 +400,7 @@ export function rewriteFeedXML(originalXML, requestURL, authorizedAPIKey) {
       if (link["@_type"]?.toLowerCase().includes("image")) option = Option.asset;
       if (link["@_rel" ]?.toLowerCase().includes("self" )) option = Option.feed;
       link["@_href"] = encode(linkURL, 
-                              requestURL, 
+                              baseURL, 
                               option,
                               authorizedAPIKey)
                              .toString();
@@ -383,12 +414,13 @@ export function rewriteFeedXML(originalXML, requestURL, authorizedAPIKey) {
     if (!Array.isArray(rssFeed.entry)) rssFeed.entry = (rssFeed.entry) 
                                                ? [rssFeed.entry] 
                                                : [];
+    // 6.1 Remove items older than the time limit
     rssFeed.entry = rssFeed.entry.filter(item => {
       const updated = new Date(item.updated);
       return updated > timelimit;
     });
     
-    // 6.1 Patch each link entry
+    // 6.2 Patch each link entry
     rssFeed.entry.forEach(entry => {
       if (!Array.isArray(entry.link)) entry.link = (entry.link) 
                                                  ? [entry.link] 
@@ -405,13 +437,14 @@ export function rewriteFeedXML(originalXML, requestURL, authorizedAPIKey) {
         if (link["@_type"]?.toLowerCase().includes("audio")) option = Option.asset;
         if (link["@_type"]?.toLowerCase().includes("image")) option = Option.asset;
         link["@_href"] = encode(linkURL, 
-                                requestURL, 
+                                baseURL, 
                                 option,
                                 authorizedAPIKey)
                                .toString();
       });
       
-      // 6.2 TODO: Edit the Content tag as if it were HTML
+      // 6.3 Rewrite the HTML in summaries and descriptions
+      XML_rewriteEntryHTML(entry);
     });
   }
 
@@ -420,18 +453,93 @@ export function rewriteFeedXML(originalXML, requestURL, authorizedAPIKey) {
   return rewrittenXML;
 }
 
+export function rewriteHTML(originalHTML, 
+                           _targetURL, 
+                            baseURL, 
+                            authorizedAPIKey) 
+{
+  if (!(baseURL instanceof URL)
+   || !(_targetURL instanceof URL)
+   || typeof originalHTML !== 'string'
+   || typeof authorizedAPIKey !== 'string') 
+  { return originalHTML; }
+
+  // 1. Parse the HTML snippet
+  const htmlParser = new XMLParser({
+    ignoreAttributes: false,
+    attributeNamePrefix: "@_",
+    preserveOrder: true,
+    htmlEntities: true
+  });
+  
+  // TODO: Delete this if not needed
+  const buildURL = (relative, base) => {
+    try {
+      let targetURL = URL.parse(relative);
+      if (!targetURL) targetURL = new URL(relative, base);
+      return targetURL;
+    } catch(e) {
+      console.log(`[Proxy.rewriteHTML] could not create URL from base(${base} relative(${relative}))`);
+      return null;
+    }
+  };
+
+  let htmlObj = htmlParser.parse(originalHTML);
+
+  // 2. Recursive function to find <a> tags and rewrite @_href
+  const traverse = (nodes) => {
+    nodes.forEach(node => {
+      // fast-xml-parser with preserveOrder uses the tag name as a key in an object
+      const tagName = Object.keys(node).find(k => k !== ':@');
+      const attributes = node[':@']; // Attributes are stored here in preserveOrder mode
+
+      if (tagName === 'a' && attributes && attributes['@_href']) {
+        let targetURL = URL.parse(attributes['@_href'], _targetURL);
+        if (targetURL) attributes['@_href'] = encode(targetURL, 
+                                                     baseURL, 
+                                                     Option.auto, 
+                                                     authorizedAPIKey);
+      }
+      
+      if (['img', 'video', 'audio'].includes(tagName) && attributes && attributes['@_src']) {
+        let targetURL = URL.parse(attributes['@_src'], _targetURL);
+        if (targetURL) attributes['@_src'] = encode(targetURL, 
+                                                    baseURL, 
+                                                    Option.asset, 
+                                                    authorizedAPIKey);
+      }
+
+      // If there are children, keep digging
+      if (node[tagName] && Array.isArray(node[tagName])) {
+        traverse(node[tagName]);
+      }
+    });
+  };
+
+  traverse(htmlObj);
+
+  // 3. Build back to string
+  const builder = new XMLBuilder({
+    ignoreAttributes: false,
+    attributeNamePrefix: "@_",
+    preserveOrder: true
+  });
+
+  return builder.build(htmlObj);
+}
+
 export function encode(targetURL, 
-                       requestURL, 
+                       baseURL, 
                        targetOption, 
                        authorizedAPIKey) 
 {  
   if (!(targetURL  instanceof URL)
-   || !(requestURL instanceof URL)
+   || !(baseURL instanceof URL)
    || typeof authorizedAPIKey !== "string") 
-  { throw new Error(`Parameter Error: targetURL(${targetURL}), requestURL(${requestURL}), targetOption(${targetOption}), authorizedAPIKey(${authorizedAPIKey})`); }
+  { throw new Error(`Parameter Error: targetURL(${targetURL}), baseURL(${baseURL}), targetOption(${targetOption}), authorizedAPIKey(${authorizedAPIKey})`); }
   
-  if (!requestURL.toString().endsWith(Auth.PROXY_VALID_PATH)) {
-    console.log(`[WARNING] BaseURL does not end with ${Auth.PROXY_VALID_PATH}: ${requestURL.toString()}`);
+  if (!baseURL.toString().endsWith(Auth.PROXY_VALID_PATH)) {
+    console.log(`[WARNING] BaseURL does not end with ${Auth.PROXY_VALID_PATH}: ${baseURL.toString()}`);
   }
   
   // get the target filename
@@ -445,7 +553,7 @@ export function encode(targetURL,
   
   // construct the encoded url
   const encodedPath = `${targetEncoded}/${fileName}`;
-  const encodedURL = new URL(encodedPath, requestURL);
+  const encodedURL = new URL(encodedPath, baseURL);
   encodedURL.searchParams.set("key", authorizedAPIKey);
   if (targetOption) encodedURL.searchParams.set("option", targetOption);
   
@@ -533,11 +641,5 @@ export function sanitizedResponseHeaders(incomingHeaders) {
       headers.set(key, value);
     }
   }
-  
-  // Optional: Set a User-Agent so sites don't block you as a bot
-  if (!headers.has('user-agent')) {
-    headers.set('User-Agent', 'Overcast/3.0 (+http://overcast.fm/; iOS podcast app)');
-  }
-
   return headers;
 }
