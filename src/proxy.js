@@ -430,6 +430,10 @@ export function encode(targetURL,
    || typeof authorizedAPIKey !== "string") 
   { throw new Error(`Parameter Error: targetURL(${targetURL}), requestURL(${requestURL}), targetOption(${targetOption}), authorizedAPIKey(${authorizedAPIKey})`); }
   
+  if (!requestURL.toString().endsWith(Auth.PROXY_VALID_PATH)) {
+    console.log(`[WARNING] BaseURL does not end with ${Auth.PROXY_VALID_PATH}: ${requestURL.toString()}`);
+  }
+  
   // get the target filename
   const pathComponents = targetURL.pathname.split('/');
   let fileName = pathComponents.filter(Boolean).pop() || "";
@@ -440,11 +444,10 @@ export function encode(targetURL,
   const targetEncoded = encodeURIComponent(targetBase);
   
   // construct the encoded url
-  // TODO: replace requestURL with baseURL and then use JS constructor to append path properly
-  // https://developer.mozilla.org/en-US/docs/Web/API/URL_API/Resolving_relative_references
-  let encodedURLString = `${requestURL.protocol}//${requestURL.host}${Auth.PROXY_VALID_PATH}${targetEncoded}/${fileName}?key=${authorizedAPIKey}`;
-  if (targetOption) encodedURLString+= `&option=${targetOption}`
-  const encodedURL = new URL(encodedURLString);
+  const encodedPath = `${targetEncoded}/${fileName}`;
+  const encodedURL = new URL(encodedPath, requestURL);
+  encodedURL.searchParams.set("key", authorizedAPIKey);
+  if (targetOption) encodedURL.searchParams.set("option", targetOption);
   
   // TODO: Remove the excess logging
   console.log(`[proxy.encode] ${targetURL.toString()}`);
