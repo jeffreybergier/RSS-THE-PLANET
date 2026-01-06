@@ -251,36 +251,25 @@ async function getHTML(targetURL,
   
   console.log(`[proxy.html] rewrite-start: ${targetURL.toString()}`);
   try {
-    // 1. Download the original feed
     const response = await fetch(targetURL, {
       method: requestMethod,
-      headers: requestHeaders,
+      headers: sanitizedRequestHeaders(_requestHeaders),
       redirect: 'follow'
     });
-    if (!response.ok) {
-      console.error(`[proxy.html] fetch() response(${response.status})`);
-      return response;
-    }
-    
-    // Download and Rewrite XML
-    const originalHTML = await response.text();
-    const rewrittenHTML = rewriteHTML(originalHTML, 
-                                      targetURL, 
-                                      baseURL, 
-                                      authorizedAPIKey); 
-    
-    // Return Response
-    const rewrittenHTMLSize = new TextEncoder().encode(rewrittenHTML).length;
-    const responseHeaders = sanitizedResponseHeaders(response.headers);
+
+    if (!response.ok) return response;
+    const rewrittenResponse = rewriteHTML(response, 
+                                          targetURL, 
+                                          baseURL, 
+                                          authorizedAPIKey);
+    const responseHeaders = sanitizedResponseHeaders(rewrittenResponse.headers);
     responseHeaders.set('Content-Type', 'text/html; charset=utf-8');
-    responseHeaders.set('Content-Length', rewrittenHTMLSize);
-    console.log(`[proxy.html] rewrite-done: ${targetURL.toString()} size: ${rewrittenHTMLSize.toString()}`);
-    return new Response(rewrittenHTML, {
+    return new Response(rewrittenResponse.body, {
       status: response.status,
       headers: responseHeaders
     });
   } catch (error) {
-    console.error(`[proxy.html] fetch() ${error.message}`);
+    console.error(`[proxy.html] error: ${error.message}`);
     return Auth.errorTargetUnreachable(targetURL.pathname);
   }
 }
@@ -516,85 +505,70 @@ export function rewriteFeedXML(originalXML,
   return rewrittenXML;
 }
 
-export function rewriteHTML(originalHTML, 
-                           _targetURL, 
+export function rewriteHTML(response, 
+                           _targetURL,
                             baseURL, 
                             authorizedAPIKey) 
 {
-  if (!(baseURL instanceof URL) || !(_targetURL instanceof URL) || 
-      typeof originalHTML !== 'string' || typeof authorizedAPIKey !== 'string') {
-    return originalHTML;
-  }
+  return new HTMLRewriter()
+    // 1. Nuke Scripts and Noscripts
+    .on('script', { element: el => el.remove() })
+    .on('noscript', { element: el => el.remove() })
 
-  const htmlParser = new XMLParser({
-    ignoreAttributes: false,
-    attributeNamePrefix: "@_",
-    preserveOrder: true,
-    htmlEntities: true,
-    allowBooleanAttributes: true,
-    parseTagValue: false 
-  });
-
-  let htmlObj;
-  try {
-    htmlObj = htmlParser.parse(originalHTML);
-  } catch (e) {
-    return originalHTML; // Fallback to raw if parsing fails
-  }
-
-  const processNodes = (nodes) => {
-    for (let i = nodes.length - 1; i >= 0; i--) {
-      const node = nodes[i];
-      const tagName = Object.keys(node).find(k => k !== ':@');
-      const attributes = node[':@'];
-
-      // 1. Nuke Scripts
-      if (tagName === 'script' || tagName === 'noscript') {
-        nodes.splice(i, 1);
-        continue;
-      }
-
-      if (attributes) {
-        // 2. Remove "onmouseover", "onclick", etc.
-        Object.keys(attributes).forEach(attr => {
-          if (attr.toLowerCase().startsWith('@_on')) delete attributes[attr];
-        });
-
-        // 3. Rewrite Links
-        if (tagName === 'a' && attributes['@_href']) {
-          const target = URL.parse(attributes['@_href'], _targetURL);
-          if (target) attributes['@_href'] = encode(target, baseURL, Option.auto, authorizedAPIKey).toString();
-        }
-
-        // 4. Rewrite Assets (Images/Video/Audio)
-        if (['img', 'video', 'audio', 'source'].includes(tagName) && attributes['@_src']) {
-          const target = URL.parse(attributes['@_src'], _targetURL);
-          if (target) attributes['@_src'] = encode(target, baseURL, Option.asset, authorizedAPIKey).toString();
-        }
-
-        // 5. Rewrite Stylesheets
-        if (tagName === 'link' && attributes['@_rel']?.toLowerCase() === 'stylesheet') {
-          const target = URL.parse(attributes['@_href'], _targetURL);
-          if (target) attributes['@_href'] = encode(target, baseURL, Option.asset, authorizedAPIKey).toString();
+    // 2. Global Attribute Cleaner (Removes inline JS)
+    .on('*', {
+      element(el) {
+        // el.attributes is an iterator of [name, value]
+        for (const [name] of el.attributes) {
+          if (name.startsWith('on')) {
+            el.removeAttribute(name);
+          }
         }
       }
+    })
 
-      if (node[tagName] && Array.isArray(node[tagName])) {
-        processNodes(node[tagName]);
+    // 3. Rewrite Links
+    .on('a', {
+      element(el) {
+        const href = el.getAttribute('href');
+        if (href) {
+          const target = URL.parse(href, _targetURL);
+          if (target) {
+            const proxied = encode(target, baseURL, Option.auto, authorizedAPIKey);
+            el.setAttribute('href', proxied.toString());
+          }
+        }
       }
-    }
-  };
+    })
 
-  processNodes(htmlObj);
+    // 4. Rewrite Assets
+    .on('img, video, audio, source', {
+      element(el) {
+        const src = el.getAttribute('src');
+        if (src) {
+          const target = URL.parse(src, _targetURL);
+          if (target) {
+            const proxied = encode(target, baseURL, Option.asset, authorizedAPIKey);
+            el.setAttribute('src', proxied.toString());
+          }
+        }
+      }
+    })
 
-  const builder = new XMLBuilder({
-    ignoreAttributes: false,
-    attributeNamePrefix: "@_",
-    preserveOrder: true,
-    suppressEmptyNode: true 
-  });
-
-  return builder.build(htmlObj);
+    // 5. Rewrite Stylesheets
+    .on('link[rel="stylesheet"]', {
+      element(el) {
+        const href = el.getAttribute('href');
+        if (href) {
+          const target = URL.parse(href, _targetURL);
+          if (target) {
+            const proxied = encode(target, baseURL, Option.asset, authorizedAPIKey);
+            el.setAttribute('href', proxied.toString());
+          }
+        }
+      }
+    })
+    .transform(response);
 }
 
 export function encode(targetURL, 
