@@ -80,8 +80,11 @@ export async function getProxyResponse(request) {
                                                request.headers, 
                                                request.method, 
                                                authorizedAPIKey);
-  // TODO: Option.html
-
+  if (option === Option.html) return getHTML(targetURL, 
+                                             baseURL,
+                                             request.headers,
+                                             request.method, 
+                                             authorizedAPIKey);
   return null;
 }
 
@@ -218,6 +221,66 @@ async function getFeed(targetURL,
     });
   } catch (error) {
     console.error(`[proxy.feed] fetch() ${error.message}`);
+    return Auth.errorTargetUnreachable(targetURL.pathname);
+  }
+}
+
+async function getHTML(targetURL, 
+                       baseURL,
+                      _requestHeaders,
+                       requestMethod, 
+                       authorizedAPIKey) 
+{
+  if (!(targetURL instanceof URL)
+   || !(baseURL instanceof URL)
+   || !_requestHeaders
+   || !requestMethod
+   || typeof authorizedAPIKey !== "string") 
+   { throw new Error("Parameter Error: targetURL, baseURL, requestHeaders, requestMethod, authorizedAPIKey"); }
+  
+  let requestHeaders = sanitizedRequestHeaders(_requestHeaders);
+  if (requestMethod !== "GET") {
+    // Bail out immediately if we are 
+    // not proxying a normal GET request
+    return fetch(targetURL, {
+      method: requestMethod,
+      headers: requestHeaders,
+      redirect: 'follow'
+    });
+  }
+  
+  console.log(`[proxy.html] rewrite-start: ${targetURL.toString()}`);
+  try {
+    // 1. Download the original feed
+    const response = await fetch(targetURL, {
+      method: requestMethod,
+      headers: requestHeaders,
+      redirect: 'follow'
+    });
+    if (!response.ok) {
+      console.error(`[proxy.html] fetch() response(${response.status})`);
+      return response;
+    }
+    
+    // Download and Rewrite XML
+    const originalHTML = await response.text();
+    const rewrittenHTML = rewriteHTML(originalHTML, 
+                                      targetURL, 
+                                      baseURL, 
+                                      authorizedAPIKey); 
+    
+    // Return Response
+    const rewrittenHTMLSize = new TextEncoder().encode(rewrittenHTML).length;
+    const responseHeaders = sanitizedResponseHeaders(response.headers);
+    responseHeaders.set('Content-Type', 'text/html; charset=utf-8');
+    responseHeaders.set('Content-Length', rewrittenHTMLSize);
+    console.log(`[proxy.html] rewrite-done: ${targetURL.toString()} size: ${rewrittenHTMLSize.toString()}`);
+    return new Response(rewrittenHTML, {
+      status: response.status,
+      headers: responseHeaders
+    });
+  } catch (error) {
+    console.error(`[proxy.html] fetch() ${error.message}`);
     return Auth.errorTargetUnreachable(targetURL.pathname);
   }
 }
@@ -458,71 +521,77 @@ export function rewriteHTML(originalHTML,
                             baseURL, 
                             authorizedAPIKey) 
 {
-  if (!(baseURL instanceof URL)
-   || !(_targetURL instanceof URL)
-   || typeof originalHTML !== 'string'
-   || typeof authorizedAPIKey !== 'string') 
-  { return originalHTML; }
+  if (!(baseURL instanceof URL) || !(_targetURL instanceof URL) || 
+      typeof originalHTML !== 'string' || typeof authorizedAPIKey !== 'string') {
+    return originalHTML;
+  }
 
-  // 1. Parse the HTML snippet
   const htmlParser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: "@_",
     preserveOrder: true,
-    htmlEntities: true
+    htmlEntities: true,
+    allowBooleanAttributes: true,
+    parseTagValue: false 
   });
-  
-  // TODO: Delete this if not needed
-  const buildURL = (relative, base) => {
-    try {
-      let targetURL = URL.parse(relative);
-      if (!targetURL) targetURL = new URL(relative, base);
-      return targetURL;
-    } catch(e) {
-      console.log(`[Proxy.rewriteHTML] could not create URL from base(${base} relative(${relative}))`);
-      return null;
+
+  let htmlObj;
+  try {
+    htmlObj = htmlParser.parse(originalHTML);
+  } catch (e) {
+    return originalHTML; // Fallback to raw if parsing fails
+  }
+
+  const processNodes = (nodes) => {
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const node = nodes[i];
+      const tagName = Object.keys(node).find(k => k !== ':@');
+      const attributes = node[':@'];
+
+      // 1. Nuke Scripts
+      if (tagName === 'script' || tagName === 'noscript') {
+        nodes.splice(i, 1);
+        continue;
+      }
+
+      if (attributes) {
+        // 2. Remove "onmouseover", "onclick", etc.
+        Object.keys(attributes).forEach(attr => {
+          if (attr.toLowerCase().startsWith('@_on')) delete attributes[attr];
+        });
+
+        // 3. Rewrite Links
+        if (tagName === 'a' && attributes['@_href']) {
+          const target = URL.parse(attributes['@_href'], _targetURL);
+          if (target) attributes['@_href'] = encode(target, baseURL, Option.auto, authorizedAPIKey).toString();
+        }
+
+        // 4. Rewrite Assets (Images/Video/Audio)
+        if (['img', 'video', 'audio', 'source'].includes(tagName) && attributes['@_src']) {
+          const target = URL.parse(attributes['@_src'], _targetURL);
+          if (target) attributes['@_src'] = encode(target, baseURL, Option.asset, authorizedAPIKey).toString();
+        }
+
+        // 5. Rewrite Stylesheets
+        if (tagName === 'link' && attributes['@_rel']?.toLowerCase() === 'stylesheet') {
+          const target = URL.parse(attributes['@_href'], _targetURL);
+          if (target) attributes['@_href'] = encode(target, baseURL, Option.asset, authorizedAPIKey).toString();
+        }
+      }
+
+      if (node[tagName] && Array.isArray(node[tagName])) {
+        processNodes(node[tagName]);
+      }
     }
   };
 
-  let htmlObj = htmlParser.parse(originalHTML);
+  processNodes(htmlObj);
 
-  // 2. Recursive function to find <a> tags and rewrite @_href
-  const traverse = (nodes) => {
-    nodes.forEach(node => {
-      // fast-xml-parser with preserveOrder uses the tag name as a key in an object
-      const tagName = Object.keys(node).find(k => k !== ':@');
-      const attributes = node[':@']; // Attributes are stored here in preserveOrder mode
-
-      if (tagName === 'a' && attributes && attributes['@_href']) {
-        let targetURL = URL.parse(attributes['@_href'], _targetURL);
-        if (targetURL) attributes['@_href'] = encode(targetURL, 
-                                                     baseURL, 
-                                                     Option.auto, 
-                                                     authorizedAPIKey);
-      }
-      
-      if (['img', 'video', 'audio'].includes(tagName) && attributes && attributes['@_src']) {
-        let targetURL = URL.parse(attributes['@_src'], _targetURL);
-        if (targetURL) attributes['@_src'] = encode(targetURL, 
-                                                    baseURL, 
-                                                    Option.asset, 
-                                                    authorizedAPIKey);
-      }
-
-      // If there are children, keep digging
-      if (node[tagName] && Array.isArray(node[tagName])) {
-        traverse(node[tagName]);
-      }
-    });
-  };
-
-  traverse(htmlObj);
-
-  // 3. Build back to string
   const builder = new XMLBuilder({
     ignoreAttributes: false,
     attributeNamePrefix: "@_",
-    preserveOrder: true
+    preserveOrder: true,
+    suppressEmptyNode: true 
   });
 
   return builder.build(htmlObj);
