@@ -495,24 +495,13 @@ export function rewriteHTML(response,
                             baseURL, 
                             authorizedAPIKey) 
 {
+  const removeScripts = new HTMLRewriter()
+    .on('script',   { element: el => el.remove() })
+    .on('noscript',   { element: el => el.removeAndKeepContent() })
+    .transform(response);
+  
   return new HTMLRewriter()
-    // 1. Nuke Scripts and Noscripts
-    .on('script', { element: el => el.remove() })
-    .on('noscript', { element: el => el.remove() })
-
-    // 2. Global Attribute Cleaner (Removes inline JS)
-    .on('*', {
-      element(el) {
-        // el.attributes is an iterator of [name, value]
-        for (const [name] of el.attributes) {
-          if (name.startsWith('on')) {
-            el.removeAttribute(name);
-          }
-        }
-      }
-    })
-
-    // 3. Rewrite Links
+    // Rewrite Links
     .on('a', {
       element(el) {
         const href = el.getAttribute('href');
@@ -525,8 +514,18 @@ export function rewriteHTML(response,
         }
       }
     })
-
-    // 4. Rewrite Assets
+    // Rewrite onClick and other on functions
+    .on('*', {
+      element(el) {
+        // el.attributes is an iterator of [name, value]
+        for (const [name] of el.attributes) {
+          if (name.startsWith('on')) {
+            el.removeAttribute(name);
+          }
+        }
+      }
+    })
+    // Rewrite Assets
     .on('img, video, audio, source', {
       element(el) {
         const src = el.getAttribute('src');
@@ -539,8 +538,7 @@ export function rewriteHTML(response,
         }
       }
     })
-
-    // 5. Rewrite Stylesheets
+    // Rewrite Stylesheets
     .on('link[rel="stylesheet"]', {
       element(el) {
         const href = el.getAttribute('href');
@@ -553,7 +551,51 @@ export function rewriteHTML(response,
         }
       }
     })
-    .transform(response);
+    // Rewrite SRCSETS (choose the best picture under 1000px)
+    .on('img, source', {
+      element(el) {
+        const srcset = el.getAttribute('srcset');
+        
+        if (srcset) {
+          // 1. Split into individual candidates
+          const candidates = srcset.split(',').map(entry => {
+            const parts = entry.trim().split(/\s+/);
+            const url = parts[0];
+            // Parse width (e.g., "1080w" -> 1080). Default to 0 if not found.
+            const width = parts[1] && parts[1].endsWith('w') 
+                          ? parseInt(parts[1].slice(0, -1), 10) 
+                          : 0;
+            return { url, width };
+          });
+    
+          // 2. Filter for those under 1000px, then sort descending (largest first)
+          const suitable = candidates
+            .filter(c => c.width > 0 && c.width <= 1000)
+            .sort((a, b) => b.width - a.width);
+    
+          // 3. Choose the winner
+          // If we found one under 1000, take the largest of those.
+          // Otherwise, fallback to the first one in the original list (usually the smallest).
+          const winner = suitable.length > 0 ? suitable[0] : candidates[0];
+    
+          if (winner && winner.url) {
+            const target = URL.parse(winner.url, _targetURL);
+            if (target) {
+              const proxied = encode(target, baseURL, Option.asset, authorizedAPIKey);
+              el.setAttribute('src', proxied.toString());
+            }
+          }
+    
+          // 4. ALWAYS remove the original srcset
+          // This stops modern-ish retro browsers from trying to be "smart"
+          el.removeAttribute('srcset');
+          el.removeAttribute('sizes');
+        } else {
+          // ... existing src-only rewriting logic ...
+        }
+      }
+    })
+    .transform(removeScripts);
 }
 
 export function encode(targetURL, 
