@@ -1,6 +1,17 @@
 import * as Auth from './auth.js';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
+let XP_HTMLRewriter;
+if (globalThis.HTMLRewriter) {
+  console.log("[proxy] Using HTMLRewriter from Cloudflare");
+  XP_HTMLRewriter = globalThis.HTMLRewriter;
+} else {
+  console.log("[proxy] Using HTMLRewriter from Node.js");
+  const packageName = "htmlrewriter"; 
+  const mod = await import(packageName);
+  XP_HTMLRewriter = mod.HTMLRewriter;
+}
+
 // MARK: Custom Types
 
 export const Option = {
@@ -495,12 +506,12 @@ export function rewriteHTML(response,
                             baseURL, 
                             authorizedAPIKey) 
 {
-  const removeScripts = new HTMLRewriter()
+  const removeScripts = new XP_HTMLRewriter()
     .on('script',   { element: el => el.remove() })
     .on('noscript',   { element: el => el.removeAndKeepContent() })
     .transform(response);
   
-  return new HTMLRewriter()
+  return new XP_HTMLRewriter()
     // Rewrite Links
     .on('a', {
       element(el) {
