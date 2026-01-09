@@ -5,6 +5,9 @@ const API_KEY = process.env.VALID_KEY;
 const OPML_PATH = "tests/proxy-test-feeds.opml";
 const TEST_FEEDS = loadFeedsFromOPML(OPML_PATH);
 
+// TODO: Enhance test report using
+// run: npx github-actions-ctrf ctrf/ctrf-report.json
+
 /**
  * Loads and parses the OPML file into a flat array of { name, url }
  */
