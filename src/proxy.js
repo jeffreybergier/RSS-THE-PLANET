@@ -618,17 +618,36 @@ export function encode(targetURL,
     console.log(`[WARNING] BaseURL does not end with ${Auth.PROXY_VALID_PATH}: ${baseURL.toString()}`);
   }
   
-  // HACK: Special Cases for URLs that are too long
-  if (targetURL.hostname.includes("podtrac.com")) {
+   // HACK for Podtrac - it often makes URLs that are too long
+  if (targetURL.hostname.includes("podtrac.com") && 
+      targetURL.pathname.startsWith("/redirect.mp3")) 
+  {
+    const hostingMarkers = [
+      "stitcher.simplecastaudio.com",
+      "traffic.libsyn.com",
+      "traffic.megaphone.fm",
+      "api.spreaker.com",
+    ];
     const urlString = targetURL.toString();
-    const marker = "stitcher.simplecastaudio.com";
-    if (urlString.includes(marker)) {
-      // 1. Remove query parameters (everything after ?)
-      const [pathOnly] = urlString.split('?');
-      // 2. Extract starting from the actual hosting domain
-      const cleanPath = pathOnly.substring(pathOnly.indexOf(marker));
-      // 3. Re-initialize targetURL with the direct, shorter path
-      targetURL = new URL("https://" + cleanPath);
+    for (const marker of hostingMarkers) {
+      if (urlString.includes(marker)) {
+        const [pathOnly] = urlString.split('?');
+        const startIndex = pathOnly.indexOf(marker);
+        const cleanPath = pathOnly.substring(startIndex);
+        targetURL = new URL("https://" + cleanPath);
+        break;
+      }
+    }
+  }
+  
+  // HACK for blubrry
+  if (targetURL.hostname.includes("media.blubrry.com")) {
+    const [pathOnly] = targetURL.toString().split('?');
+    const segments = pathOnly.split('/');
+    // Pattern: https://media.blubrry.com/SLUG/REAL_DOMAIN/PATH
+    // Segments: ["https:", "", "media.blubrry.com", "SLUG", "REAL_DOMAIN", ...]
+    if (segments.length > 4) {
+      targetURL = new URL("https://" + segments.slice(4).join('/'));
     }
   }
   
