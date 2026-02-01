@@ -19,10 +19,11 @@ export const Option = {
   feed:  "feed",
   html:  "html",
   asset: "asset",
+  image: "image",
   getOption(parameter) {
     if (typeof parameter !== 'string') return this.auto;
     const normalized = parameter.toLowerCase();
-    const validOptions = [this.auto, this.feed, this.html, this.asset];
+    const validOptions = [this.auto, this.feed, this.html, this.asset, this.image];
     return validOptions.includes(normalized) ? normalized : this.auto;
   },
   async fetchAutoOption(targetURL) {
@@ -31,10 +32,11 @@ export const Option = {
     if (!response.ok) return null;
     const contentType = response.headers.get("Content-Type") || "";
     console.log(`[proxy.Option] autodetected Content-Type: ${contentType}`);
-    if (contentType.includes("xml"))  return Option.feed; 
-    if (contentType.includes("rss"))  return Option.feed;
-    if (contentType.includes("atom")) return Option.feed;
-    if (contentType.includes("html")) return Option.html;
+    if (contentType.includes("xml"))   return Option.feed; 
+    if (contentType.includes("rss"))   return Option.feed;
+    if (contentType.includes("atom"))  return Option.feed;
+    if (contentType.includes("html"))  return Option.html;
+    if (contentType.includes("image")) return Option.image;
     return Option.asset;
   } catch (e) {
     console.error(`[proxy.getAuto] error: ${e.message}`);
@@ -88,6 +90,10 @@ export async function getProxyResponse(request) {
                                              request.method, 
                                              authorizedAPIKey);
   if (option === Option.asset) return getAsset(targetURL, 
+                                               request.headers, 
+                                               request.method, 
+                                               authorizedAPIKey);
+  if (option === Option.image) return getImage(targetURL, 
                                                request.headers, 
                                                request.method, 
                                                authorizedAPIKey);
@@ -307,7 +313,28 @@ function getAsset(targetURL,
   });
 }
 
-
+function getImage(targetURL, 
+                  requestHeaders, 
+                  requestMethod, 
+                  authorizedAPIKey) 
+{
+  if (!(targetURL instanceof URL)
+   || !requestHeaders
+   || !requestMethod
+   || typeof authorizedAPIKey !== "string") 
+  { throw new Error("Parameter Error: targetURL, requestHeaders, requestMethod, authorizedAPIKey"); }
+  
+  // TODO: Change this to download the image and then resize it to be 1024px or less
+  const headers = sanitizedRequestHeaders(requestHeaders);
+  console.log(`[proxy.image] passing through: ${targetURL.toString()}`);
+  
+  // TODO: Add cache-control
+  return fetch(targetURL, {
+    method: requestMethod,
+    headers: headers,
+    redirect: 'follow'
+  });
+}
 
 // MARK: Model (Testable)
 
@@ -389,7 +416,7 @@ export async function rewriteFeedXML(originalXML,
     // 3.1 Delete itunes:new-feed-url
     delete rssChannel["itunes:new-feed-url"];
     // 3.2 Replace itunes:image
-    XML_encodeURL(rssChannel["itunes:image"], "@_href", Option.asset);
+    XML_encodeURL(rssChannel["itunes:image"], "@_href", Option.image);
     // 3.3 Replace Links
     XML_encodeURL(rssChannel, "link", Option.auto);
     // 3.4 Replace Self Link
@@ -397,7 +424,7 @@ export async function rewriteFeedXML(originalXML,
       return item["@_rel"] === "self";
     });
     // 3.5 Replace the channel image
-    XML_encodeURL(rssChannel.image, "url", Option.asset);
+    XML_encodeURL(rssChannel.image, "url", Option.image);
     XML_encodeURL(rssChannel.image, "link", Option.auto);
     // 4 Patch each item in the channel
     if (!Array.isArray(rssChannel.item)) rssChannel.item = (rssChannel.item) 
@@ -412,7 +439,7 @@ export async function rewriteFeedXML(originalXML,
       // 4.2 Replace the Link property
       XML_encodeURL(item, "link", Option.auto);
       // 4.3 Replace the itunes image url
-      XML_encodeURL(item["itunes:image"], "@_href", Option.asset);
+      XML_encodeURL(item["itunes:image"], "@_href", Option.image);
       // 4.4 Replace enclosure url
       XML_encodeURL(item.enclosure, "@_url", Option.asset);
       // 4.5 Rewrite the HTML in summaries and descriptions
@@ -435,7 +462,7 @@ export async function rewriteFeedXML(originalXML,
       if (link["@_type"]?.toLowerCase().includes("rss"  )) option = Option.feed;
       if (link["@_type"]?.toLowerCase().includes("atom" )) option = Option.feed;
       if (link["@_type"]?.toLowerCase().includes("audio")) option = Option.asset;
-      if (link["@_type"]?.toLowerCase().includes("image")) option = Option.asset;
+      if (link["@_type"]?.toLowerCase().includes("image")) option = Option.image;
       if (link["@_rel" ]?.toLowerCase().includes("self" )) option = Option.feed;
       link["@_href"] = encode(linkURL, 
                               baseURL, 
@@ -445,8 +472,8 @@ export async function rewriteFeedXML(originalXML,
     });
     
     // 5.2 replace logo and icon which are in the spec
-    XML_encodeURL(rssFeed, "logo", Option.asset);
-    XML_encodeURL(rssFeed, "icon", Option.asset);
+    XML_encodeURL(rssFeed, "logo", Option.image);
+    XML_encodeURL(rssFeed, "icon", Option.image);
     
     // 6 Correct all of the entries
     if (!Array.isArray(rssFeed.entry)) rssFeed.entry = (rssFeed.entry) 
@@ -473,7 +500,7 @@ export async function rewriteFeedXML(originalXML,
         if (link["@_type"]?.toLowerCase().includes("rss"  )) option = Option.feed;
         if (link["@_type"]?.toLowerCase().includes("atom" )) option = Option.feed;
         if (link["@_type"]?.toLowerCase().includes("audio")) option = Option.asset;
-        if (link["@_type"]?.toLowerCase().includes("image")) option = Option.asset;
+        if (link["@_type"]?.toLowerCase().includes("image")) option = Option.image;
         link["@_href"] = encode(linkURL, 
                                 baseURL, 
                                 option,
@@ -531,8 +558,21 @@ export function rewriteHTML(response,
         }
       }
     })
+    // Rewrite Images
+    .on('img', {
+      element(el) {
+        const src = el.getAttribute('src');
+        if (src) {
+          const target = URL.parse(src, _targetURL);
+          if (target) {
+            const proxied = encode(target, baseURL, Option.image, authorizedAPIKey);
+            el.setAttribute('src', proxied.toString());
+          }
+        }
+      }
+    })
     // Rewrite Assets
-    .on('img, video, audio, source', {
+    .on('video, audio, source', {
       element(el) {
         const src = el.getAttribute('src');
         if (src) {
@@ -587,7 +627,7 @@ export function rewriteHTML(response,
           if (winner && winner.url) {
             const target = URL.parse(winner.url, _targetURL);
             if (target) {
-              const proxied = encode(target, baseURL, Option.asset, authorizedAPIKey);
+              const proxied = encode(target, baseURL, Option.image, authorizedAPIKey);
               el.setAttribute('src', proxied.toString());
             }
           }
