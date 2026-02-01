@@ -354,30 +354,6 @@ export async function rewriteFeedXML(originalXML,
     parent[key] = (typeof target === "object" && "__cdata" in target) ? { "__cdata": finalURL } : finalURL;
   }
   
-  function XML_replace(parent, key, newValue, where) {
-    if (!parent) return;
-    if (Array.isArray(parent)) {
-      parent.forEach(item => XML_replace(item, key, newValue, where));
-      return;
-    }
-    const target = parent[key];
-    if (!target) return;
-    if (where && !where(parent)) return;
-    parent[key] = (typeof target === "object" && "__cdata" in target) ? { "__cdata": newValue } : newValue;
-  }
-  
-  function XML_delete(parent, key, where) {
-    if (!parent || !parent[key]) return;
-    const target = parent[key];
-    const shouldDelete = (item) => where ? where(item) : true;
-    if (Array.isArray(target)) {
-      parent[key] = target.filter(item => !shouldDelete(item));
-      if (parent[key].length === 0) delete parent[key];
-      return;
-    }
-    if (shouldDelete(target)) delete parent[key];
-  }
-  
   if (!(baseURL instanceof URL)
    || typeof originalXML !== "string"
    || typeof authorizedAPIKey !== "string") 
@@ -405,8 +381,7 @@ export async function rewriteFeedXML(originalXML,
   
   // Start Processing
   let xml = parser.parse(originalXML);
-  if (xml["?xml-stylesheet"]    ) delete xml["?xml-stylesheet"];     // Delete any stylesheet
-  if (xml.rss["@_xmlns:podcast"]) delete xml.rss["@_xmlns:podcast"]; // Delete unsupported tag
+  if (xml["?xml-stylesheet"]) delete xml["?xml-stylesheet"]; // Delete any stylesheet
   
   // 3 Patch the Atom Channel
   const rssChannel = xml.rss?.channel;
@@ -424,14 +399,6 @@ export async function rewriteFeedXML(originalXML,
     // 3.5 Replace the channel image
     XML_encodeURL(rssChannel.image, "url", Option.asset);
     XML_encodeURL(rssChannel.image, "link", Option.auto);
-    // 3.6 HACK: Replace application/atom+xml
-    XML_replace(rssChannel["atom:link"], "@_type", "application/rss+xml", item => {
-      return item["@_rel"] === "self" && item["@_type"] === "application/atom+xml";
-    });
-    // 3.6 HACK: Delete extra content encoding in simplecast.com feeds
-    XML_delete(rssChannel, "atom:link", item => {
-      return item["@_rel"] === "hub";
-    });
     // 4 Patch each item in the channel
     if (!Array.isArray(rssChannel.item)) rssChannel.item = (rssChannel.item) 
                                                    ? [rssChannel.item] 
