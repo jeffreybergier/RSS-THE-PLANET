@@ -673,10 +673,12 @@ export function encode(targetURL,
       "traffic.libsyn.com",
       "traffic.megaphone.fm",
       "api.spreaker.com",
+      "traffic.omny.fm",
     ];
     const urlString = targetURL.toString();
     for (const marker of hostingMarkers) {
       if (urlString.includes(marker)) {
+        console.log(`[proxy.encode] removed podtrac ${targetURL.toString()}`);
         const [pathOnly] = urlString.split('?');
         const startIndex = pathOnly.indexOf(marker);
         const cleanPath = pathOnly.substring(startIndex);
@@ -693,7 +695,21 @@ export function encode(targetURL,
     // Pattern: https://media.blubrry.com/SLUG/REAL_DOMAIN/PATH
     // Segments: ["https:", "", "media.blubrry.com", "SLUG", "REAL_DOMAIN", ...]
     if (segments.length > 4) {
+      console.log(`[proxy.encode] removed blubrry ${targetURL.toString()}`);
       targetURL = new URL("https://" + segments.slice(4).join('/'));
+    }
+  }
+  
+  // HACK pscrb.fm
+  if (targetURL.hostname.includes("pscrb.fm")) {
+    const urlString = targetURL.toString();
+    const marker = "waaa.wnyc.org";
+    if (urlString.includes(marker)) {
+      console.log(`[proxy.encode] removed pscrb.fm ${targetURL.toString()}`);
+      const [pathOnly] = urlString.split('?');
+      const startIndex = pathOnly.indexOf(marker);
+      const cleanPath = pathOnly.substring(startIndex);
+      targetURL = new URL("https://" + cleanPath);
     }
   }
   
@@ -712,8 +728,10 @@ export function encode(targetURL,
   encodedURL.searchParams.set("key", authorizedAPIKey);
   if (targetOption) encodedURL.searchParams.set("option", targetOption);
   
-  // TODO: Remove the excess logging
-  console.log(`[proxy.encode] ${targetURL.toString()}`);
+  const encodedURLLength = encodedURL.toString().length;
+  if (encodedURLLength >= 255) {
+    console.error(`[proxy.encode.WARN] ENCODED-LENGTH(${encodedURLLength}) ${targetURL.toString()}`);
+  }
   return encodedURL;
 }
 
