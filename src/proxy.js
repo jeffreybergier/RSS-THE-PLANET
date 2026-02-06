@@ -54,7 +54,7 @@ export async function getProxyResponse(request) {
   // 0. URL Parameters
   const requestURL = new URL(request.url);
   const baseURL = new URL(Auth.PROXY_VALID_PATH, requestURL.origin);
-  const _targetURL = decode(requestURL);
+  const _targetURL = await decode(requestURL);
   const _submittedURL = URL.parse(requestURL.searchParams.get('url'));
   const targetURL = (_targetURL) 
                    ? _targetURL
@@ -744,7 +744,7 @@ export async function encode(targetURL,
   return encodedURL;
 }
 
-export function decode(requestURL) {
+export async function decode(requestURL) {
   if (!(requestURL instanceof URL)) throw new Error("Parameter Error: Invalid URL");
   
   // url.pathname ignores the query string (?key=...) 
