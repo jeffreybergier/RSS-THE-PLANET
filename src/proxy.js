@@ -1,16 +1,6 @@
 import * as Auth from './auth.js';
+import * as XP from './xp.js';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
-
-let XP_HTMLRewriter;
-if (globalThis.HTMLRewriter) {
-  console.log("[proxy] Using HTMLRewriter from Cloudflare");
-  XP_HTMLRewriter = globalThis.HTMLRewriter;
-} else {
-  console.log("[proxy] Using HTMLRewriter from @miniflare");
-  const packageName = "@miniflare/html-rewriter"; 
-  const mod = await import(packageName);
-  XP_HTMLRewriter = mod.HTMLRewriter;
-}
 
 // MARK: Custom Types
 
@@ -543,12 +533,12 @@ export async function rewriteHTML(response,
                                   baseURL, 
                                   authorizedAPIKey) 
 {
-  const removeScripts = new XP_HTMLRewriter()
+  const removeScripts = new XP.HTMLRewriter()
     .on('script',   { element: el => el.remove() })
     .on('noscript',   { element: el => el.removeAndKeepContent() })
     .transform(response);
   
-  return new XP_HTMLRewriter()
+  return new XP.HTMLRewriter()
     // Rewrite Links
     .on('a', {
       async element(el) {
