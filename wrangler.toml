@@ -5,7 +5,7 @@ workers_dev = true
 
 [[kv_namespaces]]
 binding = "URL_STORE"
-id = "8fe18cadc1d94614af65e1699bf07457"
+id = "8a328e5dae8e4860bf5e9563baca8a75"
 
 [observability]
 enabled = true

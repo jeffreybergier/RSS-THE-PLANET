@@ -386,13 +386,8 @@ export async function rewriteFeedXML(originalXML,
    || typeof originalXML !== "string"
    || typeof authorizedAPIKey !== "string") 
   { throw new Error("Parameter Error: baseURL, originalXML, authorizedAPIKey"); }
-
-
-  // 1. Set time limit for articles
-  const timelimit = new Date();
-  timelimit.setMonth(timelimit.getMonth() - 12);
   
-  // 2. Create Parser and Builder
+  // 1. Create Parser and Builder
   const parser = new XMLParser({ 
     ignoreAttributes: false, 
     attributeNamePrefix: "@_",
@@ -407,7 +402,8 @@ export async function rewriteFeedXML(originalXML,
     cdataPropName: "__cdata"
   });
   
-  // Start Processing
+  // 2. Start Processing
+  const maxEntries = 10;
   let xml = parser.parse(originalXML);
   if (xml["?xml-stylesheet"]) delete xml["?xml-stylesheet"]; // Delete any stylesheet
   
@@ -427,15 +423,16 @@ export async function rewriteFeedXML(originalXML,
     // 3.5 Replace the channel image
     await XML_encodeURL(rssChannel.image, "url", Option.image);
     await XML_encodeURL(rssChannel.image, "link", Option.auto);
+    
     // 4 Patch each item in the channel
-    if (!Array.isArray(rssChannel.item)) rssChannel.item = (rssChannel.item) 
-                                                   ? [rssChannel.item] 
-                                                   : [];
-    // 4.1 Remove items older than the time limit
-    rssChannel.item = rssChannel.item.filter(item => {
-      const pubDate = new Date(item.pubDate);
-      return pubDate > timelimit;
-    });
+    // 4.1 Limit to maxEntries
+    if (Array.isArray(rssChannel.item)) {
+      rssChannel.item = rssChannel.item.slice(0, maxEntries);
+    } else if (rssChannel.item) {
+      rssChannel.item = [rssChannel.item];
+    } else {
+      rssChannel.item = [];
+    }
     for (const item of rssChannel.item) {
       // 4.2 Replace the Link property
       await XML_encodeURL(item, "link", Option.auto);
@@ -479,14 +476,15 @@ export async function rewriteFeedXML(originalXML,
     await XML_encodeURL(rssFeed, "icon", Option.image);
     
     // 6 Correct all of the entries
-    if (!Array.isArray(rssFeed.entry)) rssFeed.entry = (rssFeed.entry) 
-                                               ? [rssFeed.entry] 
-                                               : [];
-    // 6.1 Remove items older than the time limit
-    rssFeed.entry = rssFeed.entry.filter(item => {
-      const updated = new Date(item.updated);
-      return updated > timelimit;
-    });
+    
+    // 6.1 Limit to max entries
+    if (Array.isArray(rssFeed.entry)) {
+      rssFeed.entry = rssFeed.entry.slice(0, maxEntries);
+    } else if (rssFeed.entry) {
+      rssFeed.entry = [rssFeed.entry];
+    } else {
+      rssFeed.entry = [];
+    }
     
     // 6.2 Patch each link entry
     for (const entry of rssFeed.entry) {
@@ -717,7 +715,7 @@ export async function encodeHeavy(targetURL,
     encodedURL = new URL(encodedPath, baseURL);
     encodedURL.searchParams.set("key", authorizedAPIKey);
     if (targetOption) encodedURL.searchParams.set("option", targetOption);
-    console.log(`[proxy.encode.heavy] KVS.put ${targetURLString}`);
+    console.log(`[proxy.encode.heavy] KVS.put { ${targetEncoded} : ${targetURLString} }`);
   }
   
   return encodedURL;
@@ -744,8 +742,8 @@ export async function decode(requestURL) {
   if (targetEncoded.startsWith("KV-") && XP.KVS) {
     try {
       const targetURLString = await XP.KVS.get(targetEncoded);
+      console.log(`[proxy.decode] KVS.get { ${targetEncoded} : ${targetURLString} }`);
       const targetURL = new URL(targetURLString);
-      console.log(`[proxy.decode] KVS.get ${targetURLString}`);
       return targetURL;
     } catch (error) {
       console.error(`[proxy.decode] KVS.get failed ${error.message}`);

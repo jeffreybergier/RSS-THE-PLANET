@@ -31,9 +31,19 @@ class KVStore {
     return val === undefined ? null : val;
   }
 
-  async put(key, value) {
-    if (!this.isMock) return await this.store.put(key, value);
-    this.store.set(key, value);
+  async put(key, value, options = {}) {
+    if (this.isMock) {
+      this.store.set(key, value);
+      return; // Exit early so we don't hit the real KV logic
+    }
+    // 1. Read-Before-Write Strategy
+    const exists = await this.get(key);
+    if (exists) { 
+      console.log("[XP.KVS.put] skipping: already exists"); 
+      return;
+    }
+    // 2. Write with Options (like expirationTtl)
+    return await this.store.put(key, value, options);
   }
 
   async delete(key) {
