@@ -717,7 +717,7 @@ export async function encodeHeavy(targetURL,
     encodedURL = new URL(encodedPath, baseURL);
     encodedURL.searchParams.set("key", authorizedAPIKey);
     if (targetOption) encodedURL.searchParams.set("option", targetOption);
-    console.log(`[proxy.encodeHeavy] Saved to KVS ${targetURLString}`);
+    console.log(`[proxy.encode.heavy] KVS.put ${targetURLString}`);
   }
   
   return encodedURL;
@@ -768,50 +768,54 @@ export async function decode(requestURL) {
 }
 
 /**
- * Strips tracking and redirection wrappers from common podcast hosts 
- * to shorten URLs for legacy hardware compatibility.
+ * Aggressively strips tracking wrappers and query parameters.
  */
-function stripTracking(targetURL) {
+export function stripTracking(targetURL) {
   if (!(targetURL instanceof URL)) return targetURL;
-  let urlString = targetURL.toString();
+  const urlString = targetURL.toString();
 
-  // 1. HACK for Podtrac
-  if (targetURL.hostname.includes("podtrac.com") && targetURL.pathname.startsWith("/redirect.mp3")) {
-    const hostingMarkers = [
-      "stitcher.simplecastaudio.com",
-      "traffic.libsyn.com",
-      "traffic.megaphone.fm",
-      "api.spreaker.com",
-      "traffic.omny.fm",
-    ];
-    for (const marker of hostingMarkers) {
-      if (urlString.includes(marker)) {
-        const [pathOnly] = urlString.split('?');
-        const startIndex = pathOnly.indexOf(marker);
-        console.log(`[proxy.strip] removed podtrac wrapper`);
-        return new URL("https://" + pathOnly.substring(startIndex));
-      }
+  // 1. List of known tracking domains that wrap the real URL
+  const trackers = ["podtrac.com", "swap.fm", "pscrb.fm", "advenn.com", "chrt.fm"];
+
+  // 2. List of known "Safe" hosting domains where the real file lives
+  const hostingMarkers = [
+    "stitcher.simplecastaudio.com",
+    "traffic.libsyn.com",
+    "traffic.megaphone.fm",
+    "api.spreaker.com",
+    "traffic.omny.fm",
+    "www.omnycontent.com",
+    "waaa.wnyc.org"
+  ];
+
+  // Check if the URL is wrapped by a known tracker
+  const matchedTracker = trackers.find(t => urlString.includes(t));
+
+  if (matchedTracker) {
+    // Look for a safe hosting marker to "anchor" our cleaning
+    const marker = hostingMarkers.find(m => urlString.includes(m));
+
+    if (marker) {
+      const startIndex = urlString.indexOf(marker);
+      // Discard everything before the marker and everything after the '?'
+      const [cleanPath] = urlString.substring(startIndex).split('?');
+      
+      console.log(`[proxy.strip] Stripped ${matchedTracker} wrapper -> ${marker}`);
+      return new URL("https://" + cleanPath);
+    } else {
+      // THIS IS WHAT YOU REQUESTED: Track it so you can add new markers
+      console.error(`[proxy.strip.ERROR] Tracker found (${matchedTracker}) but no hosting marker matched: ${urlString}`);
     }
   }
 
-  // 2. HACK for Blubrry
+  // 3. SPECIAL CASE: Blubrry (Uses a path-segment based wrapper rather than a full URL)
   if (targetURL.hostname.includes("media.blubrry.com")) {
     const [pathOnly] = urlString.split('?');
     const segments = pathOnly.split('/');
     if (segments.length > 4) {
-      console.log(`[proxy.strip] removed blubrry wrapper`);
-      return new URL("https://" + segments.slice(4).join('/'));
-    }
-  }
-
-  // 3. HACK for pscrb.fm (WNYC/New York Public Radio)
-  if (targetURL.hostname.includes("pscrb.fm")) {
-    const marker = "waaa.wnyc.org";
-    if (urlString.includes(marker)) {
-      const [pathOnly] = urlString.split('?');
-      const startIndex = pathOnly.indexOf(marker);
-      console.log(`[proxy.strip] removed pscrb.fm wrapper`);
-      return new URL("https://" + pathOnly.substring(startIndex));
+      const cleanPath = segments.slice(4).join('/');
+      console.log(`[proxy.strip] Stripped blubrry -> https://${cleanPath}`);
+      return new URL("https://" + cleanPath);
     }
   }
 
