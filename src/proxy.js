@@ -41,7 +41,9 @@ Object.freeze(Option);
 
 function isLegacyUserAgent(userAgent) {
   if (typeof userAgent !== 'string') return true;
+  console.log(`[proxy.isLegacyUserAgent] ${userAgent}`);
   const legacyAgents = [
+    "NetNewsWire/3",
     "iTunes/10",
     "iTunes/9",
     "iTunes/8",
