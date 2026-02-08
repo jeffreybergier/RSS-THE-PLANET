@@ -689,9 +689,8 @@ export function encode(targetURL,
   }
   
   // get the target filename
-  const strippedTargetURL = stripTracking(targetURL);
-  const pathComponents = strippedTargetURL.pathname.split('/');
-  let fileName = pathComponents.filter(Boolean).pop() || "";
+  const strippedTargetURL = stripTracking(targetURL, targetOption);
+  const fileName = sanitizeFileName(strippedTargetURL.pathname);
   
   // encode the targetURL
   const targetURI = encodeURIComponent(strippedTargetURL.toString());
@@ -732,11 +731,12 @@ export async function encodeHeavy(targetURL,
     const targetURLString = strippedTargetURL.toString();
     const _targetEncoded = await XP.md5(targetURLString);
     const targetEncoded = "KV-" + _targetEncoded;
+    
+    // Store the url in the KVS
     await XP.KVS.put(targetEncoded, targetURLString);
     
     // get the target filename
-    const pathComponents = strippedTargetURL.pathname.split('/');
-    const fileName = pathComponents.filter(Boolean).pop() || "";
+    const fileName = sanitizeFileName(strippedTargetURL.pathname, targetOption);
     
     // construct the encoded url
     const encodedPath = `${targetEncoded}/${fileName}`;
@@ -791,6 +791,38 @@ export async function decode(requestURL) {
     console.error(`[proxy.decode] Base64 failed ${error.message}`);
     return null;
   }
+}
+
+/**
+ * Sanitizes a filename for legacy systems by removing non-ASCII characters
+ * and trimming the length to ensure compatibility with old XML parsers.
+ */
+function sanitizeFileName(rawPath, targetOption, maxLength = 15) {
+  // 1. Get the last segment
+  let fileName = rawPath.split('/').filter(Boolean).pop() || "file.bin";
+
+  if (targetOption === Option.image) {
+    // 2. Identify the extension
+    const lastDot = fileName.lastIndexOf('.');
+    const extension = lastDot !== -1 ? fileName.substring(lastDot).toLowerCase() : "";
+    const nameWithoutExt = lastDot !== -1 ? fileName.substring(0, lastDot) : fileName;
+
+    // 3. If it's a known non-JPG image extension, replace it with .jpg
+    const nonJpgExts = [".png", ".webp", ".gif", ".bmp", ".tiff", ".heic"];
+    if (nonJpgExts.includes(extension) || extension === "") {
+      // Always force JPEG because we downsample all image requests
+      // And they get changed to JPEG in the process
+      fileName = nameWithoutExt + ".jpg";
+    }
+  }
+
+  // 4. Sanitize special characters
+  const sanitized = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
+
+  // 5. Trim to last N characters (ensuring we keep the .jpg)
+  return sanitized.length > maxLength 
+    ? sanitized.substring(sanitized.length - maxLength) 
+    : sanitized;
 }
 
 /**
