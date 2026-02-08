@@ -809,7 +809,8 @@ export function stripTracking(targetURL) {
     "api.spreaker.com",
     "traffic.omny.fm",
     "www.omnycontent.com",
-    "waaa.wnyc.org"
+    "waaa.wnyc.org",
+    "media.transistor.fm",
   ];
 
   // Check if the URL is wrapped by a known tracker
