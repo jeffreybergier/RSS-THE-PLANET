@@ -1,58 +1,30 @@
-# Retro Mac Proxy
+# RSS THE PLANET
 
-A sophisticated **Cloudflare Workers** application designed to act as a bridge between the modern web and legacy systems (PowerPC Macs, early iPhones, and other vintage hardware). This proxy "translates" modern web standards into formats that lean, older browsers and RSS readers can handle without crashing.
+## 🗺️ Project Roadmap (Prioritized Features)
 
-## 🚀 Key Features
+This roadmap outlines the planned feature extensions, focusing on generating RSS feeds from modern applications to enhance compatibility with legacy systems.
 
-### 1. Multi-Mode Proxy Engine
+### Priority 1: Mastodon Personal Account RSS Feed
 
-The engine automatically categorizes requests to apply the most efficient transformation:
+The primary goal is to enable the generation of an RSS feed for a user's personal Mastodon account, allowing older RSS readers to consume Mastodon timelines.
 
-* **Feed Mode:** Specialized XML rewriting for RSS and Atom feeds.
-* **HTML Mode:** Strips modern complexities from web pages.
-* **Image Mode:** Dynamic resizing and re-encoding for low-RAM devices.
-* **Asset Mode:** Secure pass-through for binary files (MP3, PDF, etc.).
-* **Auto-Detection:** Performs a `HEAD` request to automatically determine the best proxy mode for any given URL.
+*   **1.1 Mastodon API Integration:**
+    *   Research and implement secure authentication methods for the Mastodon API (e.g., OAuth 2.0).
+    *   Develop a module to fetch a user's timeline (posts, boosts, replies) from their Mastodon instance.
+*   **1.2 RSS Feed Generation for Mastodon:**
+    *   Transform the fetched Mastodon timeline data into a standard RSS 2.0 or Atom feed format.
+    *   Ensure proper handling of content, media attachments, and author information within the feed.
+    *   Implement URL rewriting to ensure any links within Mastodon posts are proxied if necessary for legacy browser compatibility.
+*   **1.3 Caching Strategy for Mastodon Feeds:**
+    *   Implement a caching mechanism to prevent excessive API calls to Mastodon instances and improve feed delivery performance.
 
-### 2. Intelligent RSS/Atom Transformation
+### Priority 2: YouTube Personal Content RSS Feeds
 
-Optimized for vintage RSS readers (like NetNewsWire Lite or early iTunes):
+The secondary goal is to create RSS feeds for personal YouTube content, specifically focusing on user-specific elements like playlists.
 
-* **Recursive Proxying:** Automatically rewrites all internal links, enclosures, and thumbnails to route through the proxy.
-* **Memory Management (Date Pruning):** Automatically removes articles older than **12 months** to prevent large feeds from crashing legacy apps.
-* **Podcast Support:** Specifically handles `itunes:image` and `enclosure` tags for legacy iPod/iPhone syncing.
-* **Sanitization:** Strips `xml-stylesheet` declarations that often cause rendering errors on older XML parsers.
-
-### 3. Modern-to-Legacy HTML Rewriting
-
-Uses Cloudflare's `HTMLRewriter` to perform real-time "surgery" on web pages:
-
-* **JavaScript Stripping:** Removes all `<script>` tags and `on*` event attributes to prevent execution errors.
-* **Asset Routing:** Updates `<a>`, `<img>`, `<video>`, and `<audio>` tags to ensure they load via the proxy's compatible TLS stack.
-* **CSS Proxying:** Routes stylesheets through the proxy to bypass modern TLS/SSL handshake requirements.
-
-### 4. Advanced Image Optimization
-
-Specifically designed to save VRAM and System RAM:
-
-* **Resizing:** Downscales images to a maximum of **1024x1024** via `wsrv.nl`.
-* **Format Conversion:** Converts heavy modern formats into standard **JPG**.
-* **Srcset Flattening:** Parses complex modern `srcset` attributes, selects the best version **under 1000px**, and flattens it into a standard `src` tag.
-
-### 5. Compatibility "Hacks"
-
-Built-in logic to handle specific modern web hurdles:
-
-* **Tracker Stripping:** Automatically "unwraps" Podtrac and Blubrry URLs to provide direct media links, reducing redirect overhead.
-* **Safe URL Encoding:** Uses a Base64-in-Path encoding scheme to ensure target URLs don't break legacy parsers sensitive to complex query strings.
-* **UA Spoofing:** Identifies as a legacy podcast client to ensure compatibility with modern hosting providers that block generic bots.
-
-## 🛠 Technical Environment
-
-* **Platform:** Optimized for Cloudflare Workers but includes a Node.js polyfill for local development.
-* **Security:** Integrated API Key authorization to prevent unauthorized proxy usage.
-* **Performance:** Uses streaming HTML rewriting for minimal latency.
-
----
-
-**Would you like me to add a "Getting Started" or "Installation" section to this based on how you deploy your worker?**
+*   **2.1 YouTube Data API Integration (Playlists):**
+    *   Research and implement authentication for the YouTube Data API (e.g., API keys, OAuth for private playlists).
+    *   Develop functionality to fetch video lists from user-specified YouTube playlists.
+*   **2.2 RSS Feed Generation for YouTube Playlists:**
+    *   Convert YouTube playlist data (video titles, descriptions, links, thumbnails) into a standard RSS 2.0 or Atom feed.
+    *   Ensure video links are appropriately formatted or proxied for compatibility with legacy media players or browsers.
