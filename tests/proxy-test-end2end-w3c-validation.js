@@ -1,9 +1,21 @@
 import fs from "fs"; // Add this for file reading
 import { XMLParser } from "fast-xml-parser";
 
-const API_KEY = process.env.VALID_KEY;
+const VALID_KEYS_JSON = process.env.VALID_KEYS || "[]";
+let API_KEY = "";
+try {
+  const keys = JSON.parse(VALID_KEYS_JSON);
+  if (Array.isArray(keys) && keys.length > 0) {
+    API_KEY = keys[0];
+  }
+} catch (e) {
+  console.error(`Error parsing VALID_KEYS from environment: ${e.message}`);
+  process.exit(1);
+}
+
 const OPML_PATH = "tests/proxy-test-feeds.opml";
 const TEST_FEEDS = loadFeedsFromOPML(OPML_PATH);
+const TEST_PROXY_URL = process.env.TEST_PROXY_URL || "http://localhost:3000";
 
 // TODO: Enhance test report using
 // run: npx github-actions-ctrf ctrf/ctrf-report.json
@@ -57,7 +69,7 @@ const wait = (ms) => new Promise(resolve => {
 
 async function performProxyHealthCheck() {
   try {
-    const res = await fetch(`http://localhost:3000/proxy/`);
+    const res = await fetch(`${TEST_PROXY_URL}/proxy/`);
     return res.status !== 500; // If it's 500, the server is alive but erroring
   } catch (e) {
     console.error(`Error: Proxy appears to have crashed: ${e.message} ${e.cause}`);
@@ -67,7 +79,7 @@ async function performProxyHealthCheck() {
 
 async function getProxyURLStringWithURLString(urlString) {
   try {
-    const response = await fetch(`http://localhost:3000/proxy/?key=${API_KEY}&url=${encodeURIComponent(urlString)}`);
+    const response = await fetch(`${TEST_PROXY_URL}/proxy/?key=${API_KEY}&url=${encodeURIComponent(urlString)}`);
     if (!response.ok) { 
       console.error(`Error: getProxyURLStringWithURLString(${urlString})`);
       return null; 
@@ -112,7 +124,7 @@ async function getXMLBodyWithURLString(urlString) {
 }
 
 async function getW3CXMLBodyWithXMLBody(xmlBody) {
-  const cleansedXMLBody = xmlBody.replace(/http:\/\/localhost:3000/g, 'https://xxx-proxy-yyy.com');
+  const cleansedXMLBody = xmlBody.replace(new RegExp(TEST_PROXY_URL.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g'), 'https://xxx-proxy-yyy.com');
   const params = new URLSearchParams();
   params.append('output', 'soap12');
   params.append('manual', '1');

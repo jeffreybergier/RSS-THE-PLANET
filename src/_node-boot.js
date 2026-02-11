@@ -3,7 +3,7 @@ import http from 'node:http';
 import * as Router from './router.js';
 import * as XP from './xp.js';
 
-const hostname = 'localhost';
+const hostname = process.env.HOST || 'localhost';
 const port = process.env.PORT || 3000;
 const requestEnv = { 
   VALID_KEYS: process.env.VALID_KEYS || "[]"

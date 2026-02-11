@@ -1,11 +1,7 @@
-name = "insecure-xml-proxy"
+name = "rss-the-planet"
 main = "src/_cloudflare.js"
-compatibility_date = "2025-12-14"
+compatibility_date = "2026-02-01"
 workers_dev = true
-
-[[kv_namespaces]]
-binding = "URL_STORE"
-id = "8a328e5dae8e4860bf5e9563baca8a75"
 
 [observability]
 enabled = true
