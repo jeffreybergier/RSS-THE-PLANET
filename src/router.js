@@ -1,4 +1,4 @@
-import * as Proxy  from './proxy.js';
+import { ProxyHandler }  from './proxy.js'; // Import the class
 import * as Auth from './auth.js';
 
 export const AllRoutes = {
@@ -16,7 +16,10 @@ export async function route(request, env, ctx) {
   const requestURL = new URL(request.url);
   const route = AllRoutes.getRoute(requestURL.pathname);
   let response;
-  if (route === AllRoutes.proxy) response = await Proxy.getProxyResponse(request);
+  if (route === AllRoutes.proxy) {
+    const proxy = new ProxyHandler(request); // Instantiate the class
+    response = await proxy.handleRequest(); // Call the handleRequest method
+  }
   if (!response) response = Auth.errorNotFound((new URL(request.url).pathname));
   return response
 }
