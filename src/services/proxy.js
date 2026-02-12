@@ -2,43 +2,9 @@ import { Service } from './service.js';
 import * as Auth from '../lib/auth.js';
 import { KVSAdapter } from '../adapters/kvs.js';
 import { HTMLRewriter } from '../adapters/html-rewriter.js';
-import * as Crypto from '../adapters/crypto.js';
+import { Codec } from '../lib/codec.js';
+import { Option } from '../lib/option.js';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
-
-// MARK: Custom Types
-
-export const Option = {
-  auto:  "auto",
-  feed:  "feed",
-  html:  "html",
-  asset: "asset",
-  image: "image",
-  getOption(parameter) {
-    if (typeof parameter !== 'string') return this.auto;
-    const normalized = parameter.toLowerCase();
-    const validOptions = [this.auto, this.feed, this.html, this.asset, this.image];
-    return validOptions.includes(normalized) ? normalized : this.auto;
-  },
-  async fetchAutoOption(targetURL) {
-    try {
-      let response = await fetch(targetURL, { method: 'HEAD' });
-      if (!response.ok) return null;
-      const contentType = response.headers.get("Content-Type") || "";
-      console.log(`[ProxyService.Option] autodetected Content-Type: ${contentType}`);
-      if (contentType.includes("xml"))   return Option.feed; 
-      if (contentType.includes("rss"))   return Option.feed;
-      if (contentType.includes("atom"))  return Option.feed;
-      if (contentType.includes("html"))  return Option.html;
-      if (contentType.includes("image")) return Option.image;
-      return Option.asset;
-    } catch (e) {
-      console.error(`[ProxyService.getAuto] error: ${e.message}`);
-      return null;
-    }
-  }
-};
-
-Object.freeze(Option);
 
 // MARK: ProxyService Class
 
@@ -85,7 +51,7 @@ export class ProxyService extends Service {
 
   async handleRequest() {
     // 0. URL Parameters
-    const _targetURL = await this.decode(this.requestURL);
+    const _targetURL = await Codec.decode(this.requestURL, this.kvs);
     const _submittedURL = URL.parse(this.requestURL.searchParams.get('url'));
     this.targetURL = (_targetURL) ? _targetURL : _submittedURL;
     this.option = Option.getOption(this.requestURL.searchParams.get('option'));
@@ -169,7 +135,7 @@ export class ProxyService extends Service {
      || !(this.baseURL instanceof URL) 
      || !this.authorizedAPIKey) 
     { throw new Error("Parameter Error: submittedURL, baseURL, authorizedAPIKey"); }
-    const encodedURL = this.encode(this.targetURL, this.option);
+    const encodedURL = Codec.encode(this.targetURL, this.option, this.baseURL, this.authorizedAPIKey);
     const bodyContent = `${encodedURL.toString()}`;
     return new Response(bodyContent, {
       headers: { "Content-Type": "text/plain" },
@@ -348,8 +314,8 @@ export class ProxyService extends Service {
       const rawURL = URL.parse(rawValue.trim());
       if (!rawURL) return;
       const finalURL = (isLegacyClient)
-                     ? await this.encodeHeavy(rawURL, option, isLegacyClient)
-                     : this.encode(rawURL, option);
+                     ? await Codec.encodeHeavy(rawURL, option, this.baseURL, this.authorizedAPIKey, isLegacyClient, this.kvs)
+                     : Codec.encode(rawURL, option, this.baseURL, this.authorizedAPIKey);
       const finalURLString = finalURL.toString();
       parent[key] = (typeof target === "object" && "__cdata" in target) 
                   ? { "__cdata": finalURLString } 
@@ -439,9 +405,10 @@ export class ProxyService extends Service {
         if (link["@_type"]?.toLowerCase().includes("rss"  )) option = Option.feed;
         if (link["@_type"]?.toLowerCase().includes("atom" )) option = Option.feed;
         if (link["@_type"]?.toLowerCase().includes("audio")) option = Option.asset;
-        if (link["@_type"]?.toLowerCase().includes("image")) option = Option.image;
-        if (link["@_rel" ]?.toLowerCase().includes("self" )) option = Option.feed;
-        link["@_href"] = this.encode(linkURL, option).toString();
+                if (link["@_type" ]?.toLowerCase().includes("image")) option = Option.image;
+                if (link["@_rel" ]?.toLowerCase().includes("self" )) option = Option.feed;
+                link["@_href"] = Codec.encode(linkURL, option, this.baseURL, this.authorizedAPIKey).toString();
+        
       }
       
       // 5.2 replace logo and icon which are in the spec
@@ -475,7 +442,7 @@ export class ProxyService extends Service {
           if (link["@_type"]?.toLowerCase().includes("atom" )) option = Option.feed;
           if (link["@_type"]?.toLowerCase().includes("audio")) option = Option.asset;
           if (link["@_type"]?.toLowerCase().includes("image")) option = Option.image;
-          link["@_href"] = this.encode(linkURL, option).toString();
+          link["@_href"] = Codec.encode(linkURL, option, this.baseURL, this.authorizedAPIKey).toString();
         }
         
         // 6.3 Rewrite the HTML in summaries and descriptions
@@ -507,7 +474,7 @@ export class ProxyService extends Service {
           if (href) {
             const target = URL.parse(href, this.targetURL);
             if (target) {
-              const proxied = this.encode(target, Option.auto);
+              const proxied = Codec.encode(target, Option.auto, this.baseURL, this.authorizedAPIKey);
               el.setAttribute('href', proxied.toString());
             }
           }
@@ -531,7 +498,7 @@ export class ProxyService extends Service {
           if (src) {
             const target = URL.parse(src, this.targetURL);
             if (target) {
-              const proxied = this.encode(target, Option.image);
+              const proxied = Codec.encode(target, Option.image, this.baseURL, this.authorizedAPIKey);
               el.setAttribute('src', proxied.toString());
             }
           }
@@ -544,7 +511,7 @@ export class ProxyService extends Service {
           if (src) {
             const target = URL.parse(src, this.targetURL);
             if (target) {
-              const proxied = this.encode(target, Option.asset);
+              const proxied = Codec.encode(target, Option.asset, this.baseURL, this.authorizedAPIKey);
               el.setAttribute('src', proxied.toString());
             }
           }
@@ -557,7 +524,7 @@ export class ProxyService extends Service {
           if (href) {
             const target = URL.parse(href, this.targetURL);
             if (target) {
-              const proxied = this.encode(target, Option.asset);
+              const proxied = Codec.encode(target, Option.asset, this.baseURL, this.authorizedAPIKey);
               el.setAttribute('href', proxied.toString());
             }
           }
@@ -593,7 +560,7 @@ export class ProxyService extends Service {
             if (winner && winner.url) {
               const target = URL.parse(winner.url, this.targetURL);
               if (target) {
-                const proxied = this.encode(target, Option.image);
+                const proxied = Codec.encode(target, Option.image, this.baseURL, this.authorizedAPIKey);
                 el.setAttribute('src', proxied.toString());
               }
             }
@@ -608,204 +575,6 @@ export class ProxyService extends Service {
         }
       })
       .transform(removeScripts);
-  }
-
-  encode(targetURL, targetOption) {  
-    if (!(targetURL  instanceof URL)
-     || !(this.baseURL instanceof URL)
-     || typeof this.authorizedAPIKey !== "string") 
-    { throw new Error(`Parameter Error: targetURL(${targetURL}), baseURL(${this.baseURL}), targetOption(${targetOption}), authorizedAPIKey(${this.authorizedAPIKey})`); }
-    
-    if (!this.baseURL.toString().endsWith(Auth.PROXY_VALID_PATH)) {
-      console.log(`[WARNING] BaseURL does not end with ${Auth.PROXY_VALID_PATH}: ${this.baseURL.toString()}`);
-    }
-    
-    // get the target filename
-    const strippedTargetURL = this.stripTracking(targetURL);
-    const fileName = this.sanitizeFileName(strippedTargetURL.pathname, targetOption);
-    
-    // encode the targetURL
-    const targetURI = encodeURIComponent(strippedTargetURL.toString());
-    const targetBase = btoa(targetURI);
-    const targetEncoded = encodeURIComponent(targetBase);
-    
-    // construct the encoded url
-    const encodedPath = `${targetEncoded}/${fileName}`;
-    const encodedURL = new URL(encodedPath, this.baseURL);
-    encodedURL.searchParams.set("key", this.authorizedAPIKey);
-    if (targetOption) encodedURL.searchParams.set("option", targetOption);
-    
-    return encodedURL;
-  }
-
-  async encodeHeavy(targetURL, targetOption) {  
-    if (!(targetURL  instanceof URL)
-     || !(this.baseURL instanceof URL)
-     || typeof this.authorizedAPIKey !== "string") 
-    { throw new Error(`Parameter Error: targetURL(${targetURL}), baseURL(${this.baseURL}), targetOption(${targetOption}), authorizedAPIKey(${this.authorizedAPIKey})`); }
-    
-    if (!this.baseURL.toString().endsWith(Auth.PROXY_VALID_PATH)) {
-      console.log(`[WARNING] BaseURL does not end with ${Auth.PROXY_VALID_PATH}: ${this.baseURL.toString()}`);
-    }
-    
-    // Get the easy encodedURL
-    let encodedURL = this.encode(targetURL, targetOption);
-    if (!this.isLegacyClient) return encodedURL;
-    
-    if (encodedURL.toString().length >= 255 && this.kvs) {
-      // hash the targetURL
-      const strippedTargetURL = this.stripTracking(targetURL);
-      const targetURLString = strippedTargetURL.toString();
-      const _targetEncoded = await Crypto.md5(targetURLString);
-      const targetEncoded = "KV-" + _targetEncoded;
-      
-      // Store the url in the KVS
-      await this.kvs.put(targetEncoded, targetURLString);
-      
-      // get the target filename
-      const fileName = this.sanitizeFileName(strippedTargetURL.pathname, targetOption);
-      
-      // construct the encoded url
-      const encodedPath = `${targetEncoded}/${fileName}`;
-      encodedURL = new URL(encodedPath, this.baseURL);
-      encodedURL.searchParams.set("key", this.authorizedAPIKey);
-      if (targetOption) encodedURL.searchParams.set("option", targetOption);
-      console.log(`[ProxyService.encode.heavy] KVS.put { ${targetEncoded} : ${targetURLString} }`);
-    }
-    
-    return encodedURL;
-  }
-
-  async decode(requestURL) {
-    if (!(requestURL instanceof URL)) throw new Error("Parameter Error: Invalid URL");
-    
-    // url.pathname ignores the query string (?key=...) 
-    // so splitting this is safe from parameters.
-    const pathComponents = requestURL.pathname.split('/'); 
-    
-    // Path: /proxy/ENCODED_STRING/file.mp3
-    // Path: /proxy/ENCODED_STRING/
-    // Path: /proxy/ENCODED_STRING
-    // Components: ["", "proxy", "ENCODED_STRING", "file.mp3"]
-    const proxyIndex = pathComponents.indexOf("proxy");
-    if (proxyIndex === -1 || !pathComponents[proxyIndex + 1]) {
-      return null; 
-    }
-    const targetEncoded = pathComponents[proxyIndex + 1];
-      
-    // First try to fetch from KVS
-    if (targetEncoded.startsWith("KV-") && this.kvs) {
-      try {
-        const targetURLString = await this.kvs.get(targetEncoded);
-        console.log(`[ProxyService.decode] KVS.get { ${targetEncoded} : ${targetURLString} }`);
-        const targetURL = new URL(targetURLString);
-        return targetURL;
-      } catch (error) {
-        console.error(`[ProxyService.decode] KVS.get failed ${error.message}`);
-        return null;
-      }
-    }
-    
-    // Fall back to base64 decoding
-    try {
-      const targetBase = decodeURIComponent(targetEncoded);
-      const targetURI = atob(targetBase);
-      const targetURLString = decodeURIComponent(targetURI);
-      const targetURL = new URL(targetURLString);
-      console.log(`[ProxyService.decode] Base64 ${targetURLString}`);
-      return targetURL;
-    } catch (error) {
-      console.error(`[ProxyService.decode] Base64 failed ${error.message}`);
-      return null;
-    }
-  }
-
-  /**
-   * Sanitizes a filename for legacy systems by removing non-ASCII characters
-   * and trimming the length to ensure compatibility with old XML parsers.
-   */
-  sanitizeFileName(rawPath, targetOption, maxLength = 15) {
-    // 1. Get the last segment
-    let fileName = rawPath.split('/').filter(Boolean).pop() || "file.bin";
-
-    if (targetOption === Option.image) {
-      // 2. Identify the extension
-      const lastDot = fileName.lastIndexOf('.');
-      const extension = lastDot !== -1 ? fileName.substring(lastDot).toLowerCase() : "";
-      const nameWithoutExt = lastDot !== -1 ? fileName.substring(0, lastDot) : fileName;
-
-      // 3. If it's a known non-JPG image extension, replace it with .jpg
-      const nonJpgExts = [".png", ".webp", ".gif", ".bmp", ".tiff", ".heic"];
-      if (nonJpgExts.includes(extension) || extension === "") {
-        // Always force JPEG because we downsample all image requests
-        // And they get changed to JPEG in the process
-        fileName = nameWithoutExt + ".jpg";
-      }
-    }
-
-    // 4. Sanitize special characters
-    const sanitized = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-
-    // 5. Trim to last N characters (ensuring we keep the .jpg)
-    return sanitized.length > maxLength 
-      ? sanitized.substring(sanitized.length - maxLength) 
-      : sanitized;
-  }
-
-  /**
-   * Aggressively strips tracking wrappers and query parameters.
-   */
-  stripTracking(targetURL) {
-    if (!(targetURL instanceof URL)) return targetURL;
-    const urlString = targetURL.toString();
-
-    // 1. List of known tracking domains that wrap the real URL
-    const trackers = ["podtrac.com", "swap.fm", "pscrb.fm", "advenn.com", "chrt.fm"];
-
-    // 2. List of known "Safe" hosting domains where the real file lives
-    const hostingMarkers = [
-      "stitcher.simplecastaudio.com",
-      "traffic.libsyn.com",
-      "traffic.megaphone.fm",
-      "api.spreaker.com",
-      "traffic.omny.fm",
-      "www.omnycontent.com",
-      "waaa.wnyc.org",
-      "media.transistor.fm",
-    ];
-
-    // Check if the URL is wrapped by a known tracker
-    const matchedTracker = trackers.find(t => urlString.includes(t));
-
-    if (matchedTracker) {
-      // Look for a safe hosting marker to "anchor" our cleaning
-      const marker = hostingMarkers.find(m => urlString.includes(m));
-
-      if (marker) {
-        const startIndex = urlString.indexOf(marker);
-        // Discard everything before the marker and everything after the '?'
-        const [cleanPath] = urlString.substring(startIndex).split('?');
-        
-        console.log(`[ProxyService.strip] Stripped ${matchedTracker} wrapper -> ${marker}`);
-        return new URL("https://" + cleanPath);
-      } else {
-        // THIS IS WHAT YOU REQUESTED: Track it so you can add new markers
-        console.error(`[ProxyService.strip.ERROR] Tracker found (${matchedTracker}) but no hosting marker matched: ${urlString}`);
-      }
-    }
-
-    // 3. SPECIAL CASE: Blubrry (Uses a path-segment based wrapper rather than a full URL)
-    if (targetURL.hostname.includes("media.blubrry.com")) {
-      const [pathOnly] = urlString.split('?');
-      const segments = pathOnly.split('/');
-      if (segments.length > 4) {
-        const cleanPath = segments.slice(4).join('/');
-        console.log(`[ProxyService.strip] Stripped blubrry -> https://${cleanPath}`);
-        return new URL("https://" + cleanPath);
-      }
-    }
-
-    return targetURL;
   }
 
   static sanitizedRequestHeaders(incomingHeaders) {
