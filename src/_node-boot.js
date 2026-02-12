@@ -1,15 +1,14 @@
 import 'dotenv/config';
 import http from 'node:http';
 import * as Router from './router.js';
-import * as XP from './xp.js';
 
 const hostname = process.env.HOST || 'localhost';
 const port = process.env.PORT || 3000;
 const requestEnv = { 
-  VALID_KEYS: process.env.VALID_KEYS || "[]"
+  VALID_KEYS: process.env.VALID_KEYS || "[]",
+  URL_STORE: null
 };
 
-XP.initKV(null);
 const server = http.createServer(async (req, res) => {
   // 1. Wrap the raw 'req' in a standard 'Request'
   const webReq = new Request(`http://${req.headers.host}${req.url}`, {
@@ -29,7 +28,11 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(port, hostname, () => {
-  if (!requestEnv || requestEnv.VALID_KEYS.length == 0) throw "[node-boot.js] 0 auth keys"
-  console.log(`[node-boot.js] Loaded auth keys: ${requestEnv.VALID_KEYS.length}`);
+  try {
+    const keys = JSON.parse(requestEnv.VALID_KEYS);
+    console.log(`[node-boot.js] Loaded auth keys: ${keys.length}`);
+  } catch (e) {
+    console.error(`[node-boot.js] Failed to parse VALID_KEYS: ${e.message}`);
+  }
   console.log(`[node-boot.js] Started server: http://${hostname}:${port}/`);
 });

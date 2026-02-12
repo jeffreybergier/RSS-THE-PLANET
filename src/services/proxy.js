@@ -1,5 +1,8 @@
-import * as Auth from './auth.js';
-import * as XP from './xp.js';
+import { Service } from './service.js';
+import * as Auth from '../lib/auth.js';
+import { KVSAdapter } from '../adapters/kvs.js';
+import { HTMLRewriter } from '../adapters/html-rewriter.js';
+import * as Crypto from '../adapters/crypto.js';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
 // MARK: Custom Types
@@ -21,7 +24,7 @@ export const Option = {
       let response = await fetch(targetURL, { method: 'HEAD' });
       if (!response.ok) return null;
       const contentType = response.headers.get("Content-Type") || "";
-      console.log(`[proxy.Option] autodetected Content-Type: ${contentType}`);
+      console.log(`[ProxyService.Option] autodetected Content-Type: ${contentType}`);
       if (contentType.includes("xml"))   return Option.feed; 
       if (contentType.includes("rss"))   return Option.feed;
       if (contentType.includes("atom"))  return Option.feed;
@@ -29,7 +32,7 @@ export const Option = {
       if (contentType.includes("image")) return Option.image;
       return Option.asset;
     } catch (e) {
-      console.error(`[proxy.getAuto] error: ${e.message}`);
+      console.error(`[ProxyService.getAuto] error: ${e.message}`);
       return null;
     }
   }
@@ -37,22 +40,28 @@ export const Option = {
 
 Object.freeze(Option);
 
-// MARK: ProxyHandler Class
+// MARK: ProxyService Class
 
-export class ProxyHandler {
-  constructor(request) {
-    this.request = request;
+export class ProxyService extends Service {
+  static canHandle(request) {
+    const url = new URL(request.url);
+    return url.pathname.startsWith(Auth.PROXY_VALID_PATH);
+  }
+
+  constructor(request, env, ctx) {
+    super(request, env, ctx);
     this.requestURL = new URL(request.url);
     this.baseURL = new URL(Auth.PROXY_VALID_PATH, this.requestURL.origin);
-    this.requestHeaders = ProxyHandler.sanitizedRequestHeaders(request.headers);
+    this.requestHeaders = ProxyService.sanitizedRequestHeaders(request.headers);
     this.requestMethod = request.method;
-    this.isLegacyClient = ProxyHandler.isLegacyUserAgent(request.headers.get("User-Agent"));
-    this.authorizedAPIKey = ProxyHandler.getAuthorizedAPIKey(this.requestURL.searchParams.get('key'));
+    this.isLegacyClient = ProxyService.isLegacyUserAgent(request.headers.get("User-Agent"));
+    this.authorizedAPIKey = ProxyService.getAuthorizedAPIKey(this.requestURL.searchParams.get('key'));
+    this.kvs = new KVSAdapter(env.URL_STORE);
   }
 
   static isLegacyUserAgent(userAgent) {
     if (typeof userAgent !== 'string') return true;
-    console.log(`[ProxyHandler.isLegacyUserAgent] ${userAgent}`);
+    console.log(`[ProxyService.isLegacyUserAgent] ${userAgent}`);
     const legacyAgents = [
       "NetNewsWire/3",
       "iTunes/10",
@@ -89,9 +98,9 @@ export class ProxyHandler {
 
     // 3. Automatically determine option if needed
     if (this.option === Option.auto) {
-      console.log(`[ProxyHandler.handleRequest] autodetecting: ${this.targetURL.toString()}`);
+      console.log(`[ProxyService.handleRequest] autodetecting: ${this.targetURL.toString()}`);
       this.option = await Option.fetchAutoOption(this.targetURL);
-      console.log(`[ProxyHandler.handleRequest] autodetected: Option.${this.option}`);
+      console.log(`[ProxyService.handleRequest] autodetected: Option.${this.option}`);
     }
 
     // 4. See if someone is submitting a form for a new URL
@@ -176,7 +185,7 @@ export class ProxyHandler {
      || typeof this.authorizedAPIKey !== "string") 
      { throw new Error("Parameter Error: targetURL, baseURL, requestHeaders, requestMethod, authorizedAPIKey"); }
     
-    let requestHeaders = ProxyHandler.sanitizedRequestHeaders(this.requestHeaders);
+    let requestHeaders = ProxyService.sanitizedRequestHeaders(this.requestHeaders);
     if (this.requestMethod !== "GET") {
       // Bail out immediately if we are 
       // not proxying a normal GET request
@@ -187,7 +196,7 @@ export class ProxyHandler {
       });
     }
     
-    console.log(`[proxy.feed] rewrite-start: ${this.targetURL.toString()}`);
+    console.log(`[ProxyService.feed] rewrite-start: ${this.targetURL.toString()}`);
     try {
       // 1. Download the original feed
       const response = await fetch(this.targetURL, {
@@ -196,7 +205,7 @@ export class ProxyHandler {
         redirect: 'follow'
       });
       if (!response.ok) {
-        console.error(`[proxy.feed] fetch() response(${response.status})`);
+        console.error(`[ProxyService.feed] fetch() response(${response.status})`);
         return response;
       }
       
@@ -206,16 +215,16 @@ export class ProxyHandler {
       
       // Return Response
       const rewrittenXMLSize = new TextEncoder().encode(rewrittenXML).length;
-      const responseHeaders = ProxyHandler.sanitizedResponseHeaders(response.headers);
+      const responseHeaders = ProxyService.sanitizedResponseHeaders(response.headers);
       responseHeaders.set('Content-Type', 'text/xml; charset=utf-8');
       responseHeaders.set('Content-Length', rewrittenXMLSize);
-      console.log(`[proxy.feed] rewrite-done: ${this.targetURL.toString()} size: ${rewrittenXMLSize.toString()}`);
+      console.log(`[ProxyService.feed] rewrite-done: ${this.targetURL.toString()} size: ${rewrittenXMLSize.toString()}`);
       return new Response(rewrittenXML, {
         status: response.status,
         headers: responseHeaders
       });
     } catch (error) {
-      console.error(`[proxy.feed] fetch() ${error.message}`);
+      console.error(`[ProxyService.feed] fetch() ${error.message}`);
       return Auth.errorTargetUnreachable(this.targetURL.pathname);
     }
   }
@@ -228,7 +237,7 @@ export class ProxyHandler {
      || typeof this.authorizedAPIKey !== "string") 
      { throw new Error("Parameter Error: targetURL, baseURL, requestHeaders, requestMethod, authorizedAPIKey"); }
     
-    let requestHeaders = ProxyHandler.sanitizedRequestHeaders(this.requestHeaders);
+    let requestHeaders = ProxyService.sanitizedRequestHeaders(this.requestHeaders);
     if (this.requestMethod !== "GET") {
       // Bail out immediately if we are 
       // not proxying a normal GET request
@@ -239,24 +248,24 @@ export class ProxyHandler {
       });
     }
     
-    console.log(`[proxy.html] rewrite-start: ${this.targetURL.toString()}`);
+    console.log(`[ProxyService.html] rewrite-start: ${this.targetURL.toString()}`);
     try {
       const response = await fetch(this.targetURL, {
         method: this.requestMethod,
-        headers: ProxyHandler.sanitizedRequestHeaders(this.requestHeaders),
+        headers: ProxyService.sanitizedRequestHeaders(this.requestHeaders),
         redirect: 'follow'
       });
 
       if (!response.ok) return response;
       const rewrittenResponse = await this.rewriteHTML(response);
-      const responseHeaders = ProxyHandler.sanitizedResponseHeaders(rewrittenResponse.headers);
+      const responseHeaders = ProxyService.sanitizedResponseHeaders(rewrittenResponse.headers);
       responseHeaders.set('Content-Type', 'text/html; charset=utf-8');
       return new Response(rewrittenResponse.body, {
         status: response.status,
         headers: responseHeaders
       });
     } catch (error) {
-      console.error(`[proxy.html] error: ${error.message}`);
+      console.error(`[ProxyService.html] error: ${error.message}`);
       return Auth.errorTargetUnreachable(this.targetURL.pathname);
     }
   }
@@ -268,8 +277,8 @@ export class ProxyHandler {
      || typeof this.authorizedAPIKey !== "string") 
     { throw new Error("Parameter Error: targetURL, requestHeaders, requestMethod, authorizedAPIKey"); }
     
-    const headers = ProxyHandler.sanitizedRequestHeaders(this.requestHeaders);
-    console.log(`[proxy.asset] passing through: ${this.targetURL.toString()}`);
+    const headers = ProxyService.sanitizedRequestHeaders(this.requestHeaders);
+    console.log(`[ProxyService.asset] passing through: ${this.targetURL.toString()}`);
     
     // TODO: Add cache-control
     return fetch(this.targetURL, {
@@ -286,7 +295,7 @@ export class ProxyHandler {
      || typeof this.authorizedAPIKey !== "string") 
     { throw new Error("Parameter Error: targetURL, requestHeaders, requestMethod, authorizedAPIKey"); }
     
-    const headers = ProxyHandler.sanitizedRequestHeaders(this.requestHeaders);
+    const headers = ProxyService.sanitizedRequestHeaders(this.requestHeaders);
     
     // Image Resizing with Cloudflare
     const wsrvURL = new URL("https://wsrv.nl/");
@@ -297,7 +306,7 @@ export class ProxyHandler {
     wsrvURL.searchParams.set("we", "1");    // Don't enlarge smaller images
     wsrvURL.searchParams.set("output", "jpg");
     wsrvURL.searchParams.set("q", "75");
-    console.log(`[proxy.image] resizing via wsrv.nl: ${this.targetURL.toString()}`);
+    console.log(`[ProxyService.image] resizing via wsrv.nl: ${this.targetURL.toString()}`);
     
     return fetch(wsrvURL, {
       headers: headers,
@@ -485,12 +494,12 @@ export class ProxyHandler {
   }
 
   async rewriteHTML(response) { 
-    const removeScripts = new XP.HTMLRewriter()
+    const removeScripts = new HTMLRewriter()
       .on('script',   { element: el => el.remove() })
       .on('noscript',   { element: el => el.removeAndKeepContent() })
       .transform(response);
     
-    return new XP.HTMLRewriter()
+    return new HTMLRewriter()
       // Rewrite Links
       .on('a', {
         element: (el) => {
@@ -643,15 +652,15 @@ export class ProxyHandler {
     let encodedURL = this.encode(targetURL, targetOption);
     if (!this.isLegacyClient) return encodedURL;
     
-    if (encodedURL.toString().length >= 255 && XP.KVS) {
+    if (encodedURL.toString().length >= 255 && this.kvs) {
       // hash the targetURL
       const strippedTargetURL = this.stripTracking(targetURL);
       const targetURLString = strippedTargetURL.toString();
-      const _targetEncoded = await XP.md5(targetURLString);
+      const _targetEncoded = await Crypto.md5(targetURLString);
       const targetEncoded = "KV-" + _targetEncoded;
       
       // Store the url in the KVS
-      await XP.KVS.put(targetEncoded, targetURLString);
+      await this.kvs.put(targetEncoded, targetURLString);
       
       // get the target filename
       const fileName = this.sanitizeFileName(strippedTargetURL.pathname, targetOption);
@@ -661,7 +670,7 @@ export class ProxyHandler {
       encodedURL = new URL(encodedPath, this.baseURL);
       encodedURL.searchParams.set("key", this.authorizedAPIKey);
       if (targetOption) encodedURL.searchParams.set("option", targetOption);
-      console.log(`[proxy.encode.heavy] KVS.put { ${targetEncoded} : ${targetURLString} }`);
+      console.log(`[ProxyService.encode.heavy] KVS.put { ${targetEncoded} : ${targetURLString} }`);
     }
     
     return encodedURL;
@@ -685,14 +694,14 @@ export class ProxyHandler {
     const targetEncoded = pathComponents[proxyIndex + 1];
       
     // First try to fetch from KVS
-    if (targetEncoded.startsWith("KV-") && XP.KVS) {
+    if (targetEncoded.startsWith("KV-") && this.kvs) {
       try {
-        const targetURLString = await XP.KVS.get(targetEncoded);
-        console.log(`[proxy.decode] KVS.get { ${targetEncoded} : ${targetURLString} }`);
+        const targetURLString = await this.kvs.get(targetEncoded);
+        console.log(`[ProxyService.decode] KVS.get { ${targetEncoded} : ${targetURLString} }`);
         const targetURL = new URL(targetURLString);
         return targetURL;
       } catch (error) {
-        console.error(`[proxy.decode] KVS.get failed ${error.message}`);
+        console.error(`[ProxyService.decode] KVS.get failed ${error.message}`);
         return null;
       }
     }
@@ -703,10 +712,10 @@ export class ProxyHandler {
       const targetURI = atob(targetBase);
       const targetURLString = decodeURIComponent(targetURI);
       const targetURL = new URL(targetURLString);
-      console.log(`[proxy.decode] Base64 ${targetURLString}`);
+      console.log(`[ProxyService.decode] Base64 ${targetURLString}`);
       return targetURL;
     } catch (error) {
-      console.error(`[proxy.decode] Base64 failed ${error.message}`);
+      console.error(`[ProxyService.decode] Base64 failed ${error.message}`);
       return null;
     }
   }
@@ -777,11 +786,11 @@ export class ProxyHandler {
         // Discard everything before the marker and everything after the '?'
         const [cleanPath] = urlString.substring(startIndex).split('?');
         
-        console.log(`[proxy.strip] Stripped ${matchedTracker} wrapper -> ${marker}`);
+        console.log(`[ProxyService.strip] Stripped ${matchedTracker} wrapper -> ${marker}`);
         return new URL("https://" + cleanPath);
       } else {
         // THIS IS WHAT YOU REQUESTED: Track it so you can add new markers
-        console.error(`[proxy.strip.ERROR] Tracker found (${matchedTracker}) but no hosting marker matched: ${urlString}`);
+        console.error(`[ProxyService.strip.ERROR] Tracker found (${matchedTracker}) but no hosting marker matched: ${urlString}`);
       }
     }
 
@@ -791,7 +800,7 @@ export class ProxyHandler {
       const segments = pathOnly.split('/');
       if (segments.length > 4) {
         const cleanPath = segments.slice(4).join('/');
-        console.log(`[proxy.strip] Stripped blubrry -> https://${cleanPath}`);
+        console.log(`[ProxyService.strip] Stripped blubrry -> https://${cleanPath}`);
         return new URL("https://" + cleanPath);
       }
     }

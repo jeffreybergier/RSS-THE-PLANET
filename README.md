@@ -28,3 +28,11 @@ The secondary goal is to create RSS feeds for personal YouTube content, specific
 *   **2.2 RSS Feed Generation for YouTube Playlists:**
     *   Convert YouTube playlist data (video titles, descriptions, links, thumbnails) into a standard RSS 2.0 or Atom feed.
     *   Ensure video links are appropriately formatted or proxied for compatibility with legacy media players or browsers.
+
+## 🛠️ Refactoring To-Do List (Completed)
+
+- [x] Create directory structure for services, lib, and adapters.
+- [x] Refactor KVS into KVSAdapter in `src/adapters/kvs.js` and remove singleton pattern.
+- [x] Create base Service class in `src/services/service.js`.
+- [x] Refactor ProxyHandler into ProxyService in `src/services/proxy.js` inheriting from Service.
+- [x] Update `router.js` and entry points to use the new structure and KVSAdapter initialization.
