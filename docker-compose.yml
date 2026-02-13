@@ -99,3 +99,25 @@ services:
       wrangler:
         condition: service_healthy
     command: node tests/proxy-test-end2end-w3c-validation.js
+
+  # 6. Internal Tests (Node)
+  # docker-compose up test-node
+  test-node:
+    build:
+      context: .
+      target: node-container
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run test:node
+
+  # 7. Internal Tests (Wrangler)
+  # docker-compose up test-wrangler
+  test-wrangler:
+    build:
+      context: .
+      target: wrangler-container
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm test
