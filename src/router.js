@@ -1,8 +1,10 @@
 import { ProxyService } from './serve/proxy.js';
+import { OPMLService } from './serve/opml.js';
 import * as Auth from './lib/auth.js';
 
 const SERVICES = [
-  ProxyService
+  ProxyService,
+  OPMLService
 ];
 
 export async function route(request, env, ctx) {
