@@ -115,8 +115,16 @@ describe('OPML Service Integration', () => {
     const saveText = await saveResponse.text();
     expect(saveText).toContain('File Saved');
 
-    // 2. Download
-    const downloadRequest = new Request('http://example.com/opml/?action=download&filename=saved.opml&key=test-key');
+    // 2. Find the ID via listing (simulating looking at the table)
+    // We can access the store directly since it's shared in this test scope
+    // The key format is OPML::{UUID}
+    const keys = Array.from(env.URL_STORE.keys()).filter(k => k.startsWith('OPML::'));
+    expect(keys.length).toBeGreaterThan(0);
+    const fullKey = keys[0];
+    const id = fullKey.replace('OPML::', '');
+
+    // 3. Download
+    const downloadRequest = new Request(`http://example.com/opml/?action=download&id=${id}&key=test-key`);
     const downloadResponse = await Router.route(downloadRequest, env, ctx);
     expect(downloadResponse.status).toBe(200);
     expect(downloadResponse.headers.get('Content-Disposition')).toContain('saved.opml');
@@ -124,16 +132,47 @@ describe('OPML Service Integration', () => {
     const downloadedText = await downloadResponse.text();
     expect(downloadedText).toBe(opmlContent);
 
-    // 3. Convert (Rewritten Download)
-    const convertRequest = new Request('http://example.com/opml/?action=convert&filename=saved.opml&key=test-key');
+    // 4. Convert (Rewritten Download)
+    const convertRequest = new Request(`http://example.com/opml/?action=convert&id=${id}&key=test-key`);
     const convertResponse = await Router.route(convertRequest, env, ctx);
     expect(convertResponse.status).toBe(200);
     expect(convertResponse.headers.get('Content-Disposition')).toContain('proxied_saved.opml');
     
     const convertedText = await convertResponse.text();
     expect(convertedText).toContain('proxy');
-    // aHR0cDovL2V4YW1wbGUuY29tL2ZlZWQ= is 'http://example.com/feed'
     // encoded: aHR0cCUzQSUyRiUyRmV4YW1wbGUuY29tJTJGZmVlZA%3D%3D
     expect(convertedText).toContain('aHR0cCUzQSUyRiUyRmV4YW1wbGUuY29tJTJGZmVlZA%3D%3D');
+  });
+
+  it('should enforce access control on saved files', async () => {
+    // 1. Save with User A
+    const opmlContent = '<opml><body><outline text="User A" xmlUrl="http://a.com/feed"/></body></opml>';
+    const formData = new FormData();
+    formData.append('key', 'test-key');
+    formData.append('mode', 'save');
+    const file = new Blob([opmlContent], { type: 'text/x-opml' });
+    formData.append('opml', file, 'private.opml');
+
+    const saveRequest = new Request('http://example.com/opml/', {
+      method: 'POST',
+      body: formData
+    });
+
+    await Router.route(saveRequest, env, ctx);
+    
+    // 2. Find the ID
+    const keys = Array.from(env.URL_STORE.keys()).filter(k => {
+      const entry = env.URL_STORE.get(k);
+      return k.startsWith('OPML::') && entry.metadata?.filename === 'private.opml';
+    });
+    const id = keys[0].replace('OPML::', '');
+
+    // 3. Access with 'wrong-key' (Simulating unauthorized user)
+    // Note: In our mock setup, 'wrong-key' fails the initial check (is invalid key), so returns 401.
+    // If we had a valid key 'user-b' that was NOT the owner, it would pass the first check 
+    // but fail the metadata check (also 401 now).
+    const downloadRequest = new Request(`http://example.com/opml/?action=download&id=${id}&key=wrong-key`);
+    const downloadResponse = await Router.route(downloadRequest, env, ctx);
+    expect(downloadResponse.status).toBe(401);
   });
 });

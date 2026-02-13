@@ -110,19 +110,19 @@ export class ProxyService extends Service {
         <fieldset>
           <legend>Proxy Mode</legend>
           <input type="radio" id="opt-auto" name="option" value="${Option.auto}" checked>
-          <label for="opt-auto" style="display:inline;">Autodetect</label><br>
+          <label for="opt-auto" class="inline">Autodetect</label><br>
           <input type="radio" id="opt-feed" name="option" value="${Option.feed}">
-          <label for="opt-feed" style="display:inline;">News Feed (RSS, Atom)</label><br>
+          <label for="opt-feed" class="inline">News Feed (RSS, Atom)</label><br>
           <input type="radio" id="opt-html" name="option" value="${Option.html}">
-          <label for="opt-html" style="display:inline;">Web Page</label><br>
+          <label for="opt-html" class="inline">Web Page</label><br>
           <input type="radio" id="opt-asset" name="option" value="${Option.image}">
-          <label for="opt-asset" style="display:inline;">Image</label><br>
+          <label for="opt-asset" class="inline">Image</label><br>
           <input type="radio" id="opt-asset" name="option" value="${Option.asset}">
-          <label for="opt-asset" style="display:inline;">File (audio, video, etc)</label>
+          <label for="opt-asset" class="inline">File (audio, video, etc)</label>
         </fieldset>
         <p>
           <button type="submit">Generate</button>
-          <button type="reset" style="background: #666; margin-left: 0.5rem;">Reset</button>
+          <button type="reset" class="secondary ml">Reset</button>
         </p>
       </form>
     `;

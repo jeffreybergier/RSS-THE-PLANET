@@ -14,6 +14,8 @@ export const SHARED_CSS = `
   footer { font-size: 0.8rem; color: #999; }
   form { background: #fafafa; padding: 1.5rem; border-radius: 8px; border: 1px solid #eee; }
   label { font-weight: bold; display: block; margin-bottom: 0.5rem; }
+  label.inline { display: inline; font-weight: normal; margin-left: 0.25rem; margin-right: 1rem; }
+
   input[type="text"], input[type="file"], textarea { 
     width: 100%; 
     padding: 0.5rem; 
@@ -32,8 +34,34 @@ export const SHARED_CSS = `
     font-size: 1rem;
   }
   button:hover { background: #1557b0; }
+  button.secondary { background: #666; }
+  button.secondary:hover { background: #555; }
+  button.ml { margin-left: 0.5rem; }
   fieldset { border: 1px solid #ddd; border-radius: 4px; padding: 1rem; margin-bottom: 1rem; }
   legend { font-weight: bold; padding: 0 0.5rem; }
+  
+  /* Input Group */
+  .input-group { display: flex; gap: 0.5rem; }
+  .input-group input { flex-grow: 1; margin-bottom: 0; }
+  .input-group button { margin-bottom: 0; }
+  
+  /* Buttons */
+  button.secondary { background: #666; }
+  button.secondary:hover { background: #555; }
+  
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; background: white; border: 1px solid #ddd; border-radius: 4px; }
+  th { background: #f5f5f5; text-align: left; padding: 0.5rem; }
+  td { padding: 0.5rem; border-bottom: 1px solid #eee; }
+  td.id-col { font-family: monospace; font-size: 0.9em; color: #666; }
+  td.actions { text-align: right; }
+  tr.empty-state td { padding: 1rem; text-align: center; color: #666; }
+  
+  /* Links */
+  a { text-decoration: none; color: #1a73e8; }
+  a:hover { text-decoration: underline; }
+  a.action-link { font-size: 0.9rem; margin-right: 1rem; color: #666; }
+  a.action-link.primary { color: #1a73e8; font-weight: bold; margin-right: 0; }
 `;
 
 /**
