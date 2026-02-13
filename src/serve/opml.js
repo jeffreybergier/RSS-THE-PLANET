@@ -3,6 +3,7 @@ import * as Auth from '../lib/auth.js';
 import { Codec } from '../lib/codec.js';
 import { Option } from '../lib/option.js';
 import { renderError } from '../ui/error.js';
+import { renderLayout } from '../ui/theme.js';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
 // MARK: OPMLService Class
@@ -36,13 +37,7 @@ export class OPMLService extends Service {
     const key = this.requestURL.searchParams.get('key') || '';
     const actionUrl = Auth.OPML_VALID_PATH + (key ? `?key=${key}` : '');
 
-    const htmlContent = `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>RSS THE PLANET: OPML Rewriter</title>
+    const headExtras = `
       <script>
         function updateAction() {
           const key = document.getElementById('key').value;
@@ -51,27 +46,27 @@ export class OPMLService extends Service {
           form.action = baseUrl + (key ? '?key=' + encodeURIComponent(key) : '');
         }
       </script>
-    </head>
-    <body>
+    `;
+
+    const content = `
       <h2>RSS THE PLANET: OPML Rewriter</h2>
       <p>Upload an OPML file to rewrite all feed URLs through this proxy.</p>
       <form id="opml-form" action="${actionUrl}" method="POST" enctype="multipart/form-data">
         <p>
-          <label for="key">API Key (if not in URL):</label><br>
+          <label for="key">API Key (if not in URL):</label>
           <input type="text" id="key" name="key" value="${key}" oninput="updateAction()">
         </p>
         <p>
-          <label for="opml">OPML File:</label><br>
+          <label for="opml">OPML File:</label>
           <input type="file" id="opml" name="opml" accept=".opml,.xml">
         </p>
         <p>
           <button type="submit">Rewrite OPML</button>
         </p>
       </form>
-    </body>
-    </html>
     `;
-    return new Response(htmlContent, {
+
+    return new Response(renderLayout("RSS THE PLANET: OPML Rewriter", content, headExtras), {
       headers: { "Content-Type": "text/html" },
       status: 200
     });

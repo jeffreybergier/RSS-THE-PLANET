@@ -5,6 +5,7 @@ import { HTMLRewriter } from '../adapt/html-rewriter.js';
 import { Codec } from '../lib/codec.js';
 import { Option } from '../lib/option.js';
 import { renderError } from '../ui/error.js';
+import { renderLayout } from '../ui/theme.js';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
 // MARK: ProxyService Class
@@ -94,48 +95,38 @@ export class ProxyService extends Service {
   }
 
   getSubmitForm() {
-    const htmlContent = `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>RSS THE PLANET: Proxy</title>
-    </head>
-    <body>
+    const content = `
       <h2>RSS THE PLANET: Proxy</h2>
       <h2>Generate Proxy URL</h2>
       <form action="${Auth.PROXY_VALID_PATH}" method="GET">
         <p>
-          <label for="key">API Key:</label><br>
+          <label for="key">API Key:</label>
           <input type="text" id="key" name="key">
         </p>
         <p>
-          <label for="url">Target URL</label><br>
-          <textarea id="url" name="url" cols="60" rows="10"></textarea>      
+          <label for="url">Target URL</label>
+          <textarea id="url" name="url" cols="60" rows="10" placeholder="https://example.com/feed.xml"></textarea>      
         </p>
         <fieldset>
           <legend>Proxy Mode</legend>
           <input type="radio" id="opt-auto" name="option" value="${Option.auto}" checked>
-          <label for="opt-auto">Autodetect</label><br>
+          <label for="opt-auto" style="display:inline;">Autodetect</label><br>
           <input type="radio" id="opt-feed" name="option" value="${Option.feed}">
-          <label for="opt-feed">News Feed (RSS, Atom)</label><br>
+          <label for="opt-feed" style="display:inline;">News Feed (RSS, Atom)</label><br>
           <input type="radio" id="opt-html" name="option" value="${Option.html}">
-          <label for="opt-feed">Web Page</label><br>
+          <label for="opt-html" style="display:inline;">Web Page</label><br>
           <input type="radio" id="opt-asset" name="option" value="${Option.image}">
-          <label for="opt-asset">Image</label><br>
+          <label for="opt-asset" style="display:inline;">Image</label><br>
           <input type="radio" id="opt-asset" name="option" value="${Option.asset}">
-          <label for="opt-asset">File (audio, video, etc)</label>
+          <label for="opt-asset" style="display:inline;">File (audio, video, etc)</label>
         </fieldset>
         <p>
           <button type="submit">Generate</button>
-          <button type="reset">Reset</button>
+          <button type="reset" style="background: #666; margin-left: 0.5rem;">Reset</button>
         </p>
       </form>
-    </body>
-    </html>
     `;
-    return new Response(htmlContent, {
+    return new Response(renderLayout("RSS THE PLANET: Proxy", content), {
       headers: { "Content-Type": "text/html" },
       status: 200
     });
