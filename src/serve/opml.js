@@ -2,6 +2,7 @@ import { Service } from './service.js';
 import * as Auth from '../lib/auth.js';
 import { Codec } from '../lib/codec.js';
 import { Option } from '../lib/option.js';
+import { renderError } from '../ui/error.js';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
 // MARK: OPMLService Class
@@ -20,10 +21,15 @@ export class OPMLService extends Service {
   }
 
   async handleRequest() {
-    if (this.request.method === "POST") {
-      return await this.handlePost();
+    try {
+      if (this.request.method === "POST") {
+        return await this.handlePost();
+      }
+      return this.getSubmitForm();
+    } catch (error) {
+      console.error(`[OPMLService.handleRequest] Internal Error: ${error.message}`);
+      return renderError(500, "An internal server error occurred", this.requestURL.pathname);
     }
-    return this.getSubmitForm();
   }
 
   getSubmitForm() {
@@ -93,7 +99,7 @@ export class OPMLService extends Service {
 
     if (!authorizedAPIKey) {
       console.log(`[OPMLService.handlePost] Unauthorized: keySource(${apiKeyBody ? 'body' : (apiKeyURL ? 'url' : 'none')}) key(${apiKey})`);
-      return Auth.errorUnauthorized(this.requestURL.pathname);
+      return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
     }
 
     // 3. Get the OPML file
