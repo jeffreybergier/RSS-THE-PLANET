@@ -1,7 +1,7 @@
 import { Service } from './service.js';
 import * as Auth from '../lib/auth.js';
-import { KVSAdapter } from '../adapters/kvs.js';
-import { HTMLRewriter } from '../adapters/html-rewriter.js';
+import { KVSAdapter } from '../adapt/kvs.js';
+import { HTMLRewriter } from '../adapt/html-rewriter.js';
 import { Codec } from '../lib/codec.js';
 import { Option } from '../lib/option.js';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';

@@ -1,4 +1,4 @@
-import { ProxyService } from './services/proxy.js';
+import { ProxyService } from './serve/proxy.js';
 import * as Auth from './lib/auth.js';
 
 const SERVICES = [

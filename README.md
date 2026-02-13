@@ -31,8 +31,8 @@ The secondary goal is to create RSS feeds for personal YouTube content, specific
 
 ## 🛠️ Refactoring To-Do List (Completed)
 
-- [x] Create directory structure for services, lib, and adapters.
-- [x] Refactor KVS into KVSAdapter in `src/adapters/kvs.js` and remove singleton pattern.
-- [x] Create base Service class in `src/services/service.js`.
-- [x] Refactor ProxyHandler into ProxyService in `src/services/proxy.js` inheriting from Service.
+- [x] Create directory structure for serve, lib, and adapt.
+- [x] Refactor KVS into KVSAdapter in `src/adapt/kvs.js` and remove singleton pattern.
+- [x] Create base Service class in `src/serve/service.js`.
+- [x] Refactor ProxyHandler into ProxyService in `src/serve/proxy.js` inheriting from Service.
 - [x] Update `router.js` and entry points to use the new structure and KVSAdapter initialization.
