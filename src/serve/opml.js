@@ -40,12 +40,43 @@ export class OPMLService extends Service {
       if (action === 'convert') {
         return await this.handleConvert();
       }
+      if (action === 'delete') {
+        return await this.handleDelete();
+      }
 
       return await this.getSubmitForm();
     } catch (error) {
       console.error(`[OPMLService.handleRequest] Internal Error: ${error.message}`);
       return renderError(500, "An internal server error occurred", this.requestURL.pathname);
     }
+  }
+
+  async handleDelete() {
+    if (!this.authorizedAPIKey || !this.kvs) {
+      return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
+    }
+    const id = this.requestURL.searchParams.get('id');
+    if (!id) {
+      return renderError(400, "File ID is required", this.requestURL.pathname);
+    }
+
+    // Attempt delete (adapter handles ownership check)
+    try {
+      await this.kvs.delete(id);
+    } catch (e) {
+      console.error(`[OPMLService.handleDelete] Error: ${e.message}`);
+      // We might want to return an error, or just redirect if it was already gone/unauthorized
+      // For security, treating unauthorized delete as silent or generic error is often better.
+      return renderError(400, "Could not delete file", this.requestURL.pathname);
+    }
+
+    // Redirect back to the list
+    return new Response(null, {
+      status: 302,
+      headers: {
+        "Location": `${Auth.OPML_VALID_PATH}?key=${this.authorizedAPIKey}`
+      }
+    });
   }
 
   async handleConvert() {
@@ -163,6 +194,11 @@ export class OPMLService extends Service {
                  class="download-link action-link primary" 
                  data-id="${f.key}"
                  data-action="convert">Convert</a>
+              <a href="${Auth.OPML_VALID_PATH}?action=delete&id=${encodeURIComponent(f.key)}&key=${this.authorizedAPIKey}" 
+                 class="download-link action-link delete" 
+                 data-id="${f.key}"
+                 data-action="delete"
+                 onclick="return confirm('Are you sure you want to delete ${f.name}?');">Delete</a>
             </td>
           </tr>
         `).join('');
