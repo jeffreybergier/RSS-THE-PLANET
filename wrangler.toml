@@ -3,5 +3,9 @@ main = "src/_cloudflare.js"
 compatibility_date = "2026-02-01"
 workers_dev = true
 
+[[kv_namespaces]]
+binding = "RSS_THE_PLANET_KVS"
+id = "5297d6c621304236ba891d258c1cb230"
+
 [observability]
 enabled = true
