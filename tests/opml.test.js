@@ -116,12 +116,12 @@ describe('OPML Service Integration', () => {
     expect(saveText).toContain('File Saved');
 
     // 2. Find the ID via listing (simulating looking at the table)
-    // We can access the store directly since it's shared in this test scope
-    // The key format is OPML::{UUID}
-    const keys = Array.from(env.RSS_THE_PLANET_KVS.keys()).filter(k => k.startsWith('OPML::'));
-    expect(keys.length).toBeGreaterThan(0);
-    const fullKey = keys[0];
-    const id = fullKey.replace('OPML::', '');
+    // We access the store directly. Keys are raw UUIDs, so we filter by checking the object's service.
+    const entries = Array.from(env.RSS_THE_PLANET_KVS.values());
+    const opmlEntry = entries.find(e => e.service === 'OPML');
+    expect(opmlEntry).toBeDefined();
+    
+    const id = opmlEntry.key; // Key is the UUID
 
     // 3. Download
     const downloadRequest = new Request(`http://example.com/opml/?action=download&id=${id}&key=test-key`);
@@ -161,11 +161,10 @@ describe('OPML Service Integration', () => {
     await Router.route(saveRequest, env, ctx);
     
     // 2. Find the ID
-    const keys = Array.from(env.RSS_THE_PLANET_KVS.keys()).filter(k => {
-      const entry = env.RSS_THE_PLANET_KVS.get(k);
-      return k.startsWith('OPML::') && entry.metadata?.filename === 'private.opml';
+    const keys = Array.from(env.RSS_THE_PLANET_KVS.values()).filter(entry => {
+      return entry.service === 'OPML' && entry.name === 'private.opml';
     });
-    const id = keys[0].replace('OPML::', '');
+    const id = keys[0].key;
 
     // 3. Access with 'wrong-key' (Simulating unauthorized user)
     // Note: In our mock setup, 'wrong-key' fails the initial check (is invalid key), so returns 401.

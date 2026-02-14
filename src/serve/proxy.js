@@ -1,6 +1,5 @@
 import { Service } from './service.js';
 import * as Auth from '../lib/auth.js';
-import { KVSAdapter } from '../adapt/kvs.js';
 import { HTMLRewriter } from '../adapt/html-rewriter.js';
 import { Codec } from '../lib/codec.js';
 import { Option } from '../lib/option.js';
@@ -24,7 +23,6 @@ export class ProxyService extends Service {
     this.requestMethod = request.method;
     this.isLegacyClient = ProxyService.isLegacyUserAgent(request.headers.get("User-Agent"));
     this.authorizedAPIKey = ProxyService.getAuthorizedAPIKey(this.requestURL.searchParams.get('key'));
-    this.kvs = new KVSAdapter(env);
   }
 
   static isLegacyUserAgent(userAgent) {
@@ -54,7 +52,7 @@ export class ProxyService extends Service {
   async handleRequest() {
     try {
       // 0. URL Parameters
-      const _targetURL = await Codec.decode(this.requestURL, this.kvs);
+      const _targetURL = Codec.decode(this.requestURL);
       const _submittedURL = URL.parse(this.requestURL.searchParams.get('url'));
       this.targetURL = (_targetURL) ? _targetURL : _submittedURL;
       this.option = Option.getOption(this.requestURL.searchParams.get('option'));
@@ -315,9 +313,7 @@ export class ProxyService extends Service {
       if (typeof rawValue !== "string") return;
       const rawURL = URL.parse(rawValue.trim());
       if (!rawURL) return;
-      const finalURL = (isLegacyClient)
-                     ? await Codec.encodeHeavy(rawURL, option, this.baseURL, this.authorizedAPIKey, isLegacyClient, this.kvs)
-                     : Codec.encode(rawURL, option, this.baseURL, this.authorizedAPIKey);
+      const finalURL = Codec.encode(rawURL, option, this.baseURL, this.authorizedAPIKey);
       const finalURLString = finalURL.toString();
       parent[key] = (typeof target === "object" && "__cdata" in target) 
                   ? { "__cdata": finalURLString } 
