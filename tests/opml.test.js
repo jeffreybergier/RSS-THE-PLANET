@@ -4,7 +4,7 @@ import * as Router from '../src/router.js';
 describe('OPML Service Integration', () => {
   const env = {
     VALID_KEYS: '["test-key"]',
-    URL_STORE: new Map() // Shared store for all tests in this block
+    RSS_THE_PLANET_KVS: new Map() // Shared store for all tests in this block
   };
   const ctx = {};
 
@@ -118,7 +118,7 @@ describe('OPML Service Integration', () => {
     // 2. Find the ID via listing (simulating looking at the table)
     // We can access the store directly since it's shared in this test scope
     // The key format is OPML::{UUID}
-    const keys = Array.from(env.URL_STORE.keys()).filter(k => k.startsWith('OPML::'));
+    const keys = Array.from(env.RSS_THE_PLANET_KVS.keys()).filter(k => k.startsWith('OPML::'));
     expect(keys.length).toBeGreaterThan(0);
     const fullKey = keys[0];
     const id = fullKey.replace('OPML::', '');
@@ -161,8 +161,8 @@ describe('OPML Service Integration', () => {
     await Router.route(saveRequest, env, ctx);
     
     // 2. Find the ID
-    const keys = Array.from(env.URL_STORE.keys()).filter(k => {
-      const entry = env.URL_STORE.get(k);
+    const keys = Array.from(env.RSS_THE_PLANET_KVS.keys()).filter(k => {
+      const entry = env.RSS_THE_PLANET_KVS.get(k);
       return k.startsWith('OPML::') && entry.metadata?.filename === 'private.opml';
     });
     const id = keys[0].replace('OPML::', '');

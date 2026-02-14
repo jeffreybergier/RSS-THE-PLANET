@@ -24,7 +24,7 @@ export class ProxyService extends Service {
     this.requestMethod = request.method;
     this.isLegacyClient = ProxyService.isLegacyUserAgent(request.headers.get("User-Agent"));
     this.authorizedAPIKey = ProxyService.getAuthorizedAPIKey(this.requestURL.searchParams.get('key'));
-    this.kvs = new KVSAdapter(env.URL_STORE);
+    this.kvs = new KVSAdapter(env);
   }
 
   static isLegacyUserAgent(userAgent) {

@@ -1,12 +1,18 @@
 export class KVSAdapter {
-  constructor(kvNamespace) {
-    if (kvNamespace && typeof kvNamespace.put === 'function') {
+  constructor(env) {
+    if (!env || !env.RSS_THE_PLANET_KVS) {
+      throw new Error("KVSAdapter Error: env.RSS_THE_PLANET_KVS is missing");
+    }
+    const kvNamespace = env.RSS_THE_PLANET_KVS;
+    
+    if (typeof kvNamespace.put === 'function') {
       this.store = kvNamespace;
       this.isMock = false;
-    } else {
-      // If it's null, undefined, or a Map (which doesn't have .put), treat as mock
-      this.store = (kvNamespace instanceof Map) ? kvNamespace : new Map();
+    } else if (kvNamespace instanceof Map) {
+      this.store = kvNamespace;
       this.isMock = true;
+    } else {
+      throw new Error("KVSAdapter Error: env.RSS_THE_PLANET_KVS is not a valid KV Namespace or Map");
     }
   }
 

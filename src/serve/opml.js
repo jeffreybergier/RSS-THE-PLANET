@@ -20,7 +20,7 @@ export class OPMLService extends Service {
     this.requestURL = new URL(request.url);
     this.baseURL = new URL(Auth.PROXY_VALID_PATH, this.requestURL.origin);
     this.authorizedAPIKey = ProxyService_getAuthorizedAPIKey(this.requestURL.searchParams.get('key'));
-    this.kvs = new KVSAdapter(env.URL_STORE);
+    this.kvs = new KVSAdapter(env);
   }
 
   async handleRequest() {

@@ -7,7 +7,7 @@ const port = process.env.PORT || 3000;
 const requestEnv = { 
   VALID_KEYS: process.env.VALID_KEYS || "[]",
   // TODO: Replace this in-memory Map with a real persistent store (e.g. Redis/fs) for production Node.js usage.
-  URL_STORE: new Map()
+  RSS_THE_PLANET_KVS: new Map()
 };
 
 const server = http.createServer(async (req, res) => {
