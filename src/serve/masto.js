@@ -22,7 +22,8 @@ export class MastoService extends Service {
     const mastoIndex = pathComponents.indexOf("masto");
     if (mastoIndex !== -1 && pathComponents[mastoIndex + 1]) {
       this.uuid = pathComponents[mastoIndex + 1];
-      this.action = pathComponents[mastoIndex + 2] || null;
+      this.type = pathComponents[mastoIndex + 2] || null;
+      this.subtype = pathComponents[mastoIndex + 3] || null;
     }
   }
 
@@ -37,9 +38,12 @@ export class MastoService extends Service {
         return await this.handlePost();
       }
 
-      const action = this.action;
-      if (action === 'delete') {
+      const type = this.type;
+      if (type === 'delete') {
         return await this.handleDelete();
+      }
+      if (type === 'status') {
+        return await this.handleStatus();
       }
 
       return await this.getSubmitForm();
@@ -70,6 +74,46 @@ export class MastoService extends Service {
       headers: {
         "Location": `${Endpoint.masto}?key=${this.authKey}`
       }
+    });
+  }
+
+  async handleStatus() {
+    if (!this.authKey || !this.kvs) {
+      return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
+    }
+    if (!this.uuid || !this.subtype) {
+      return renderError(400, "Invalid Request", this.requestURL.pathname);
+    }
+
+    const entry = await this.kvs.get(this.uuid);
+    if (!entry) {
+      return renderError(404, "Mastodon credentials not found", this.requestURL.pathname);
+    }
+
+    const server = entry.name;
+    const apiKey = entry.value;
+
+    let apiPath = "";
+    if (this.subtype === 'home') {
+      apiPath = "/api/v1/timelines/home";
+    } else if (this.subtype === 'local') {
+      apiPath = "/api/v1/timelines/public?local=true";
+    } else if (this.subtype === 'user') {
+      // Need ID. Fetch verify_credentials first.
+      const verifyUrl = new URL("/api/v1/accounts/verify_credentials", server);
+      const verifyRes = await fetch(verifyUrl, {
+        headers: { "Authorization": `Bearer ${apiKey}` }
+      });
+      if (!verifyRes.ok) return verifyRes;
+      const me = await verifyRes.json();
+      apiPath = `/api/v1/accounts/${me.id}/statuses`;
+    } else {
+      return renderError(400, "Invalid status type", this.requestURL.pathname);
+    }
+
+    const apiUrl = new URL(apiPath, server);
+    return await fetch(apiUrl, {
+      headers: { "Authorization": `Bearer ${apiKey}` }
     });
   }
 
@@ -153,6 +197,15 @@ export class MastoService extends Service {
             <td class="id-col">${f.key}</td>
             <td><strong>${f.name}</strong></td>
             <td class="actions">
+              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/status/home?key=${this.authKey}" 
+                 class="download-link action-link primary" 
+                 target="_blank">Home</a>
+              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/status/local?key=${this.authKey}" 
+                 class="download-link action-link" 
+                 target="_blank">Local</a>
+              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/status/user?key=${this.authKey}" 
+                 class="download-link action-link" 
+                 target="_blank">User</a>
               <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/delete?key=${this.authKey}" 
                  class="download-link action-link delete" 
                  onclick="return confirm('Are you sure you want to delete ${f.name}?');">Delete</a>

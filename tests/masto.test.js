@@ -64,4 +64,42 @@ describe('Masto Service Integration', () => {
     const deletedEntry = postDeleteEntries.find(e => e.key === id);
     expect(deletedEntry).toBeUndefined();
   });
+
+  it('should route status requests to Mastodon API', async () => {
+    // 1. Save an entry
+    const formData = new FormData();
+    formData.append('server', 'https://mastodon.test');
+    formData.append('apiKey', 'test-token');
+    const saveRequest = new Request('http://example.com/masto/?key=test-key', {
+      method: 'POST',
+      body: formData
+    });
+    await Router.route(saveRequest, env, ctx);
+
+    const entries = Array.from(env.RSS_THE_PLANET_KVS.values());
+    const entry = entries.find(e => e.name === 'https://mastodon.test');
+    const id = entry.key;
+
+    // 2. Mock fetch for the status call
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      if (url.toString().includes('/api/v1/timelines/home')) {
+        return new Response(JSON.stringify([{ id: '1', content: 'test post' }]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      return new Response(null, { status: 404 });
+    };
+
+    try {
+      const statusRequest = new Request(`http://example.com/masto/${id}/status/home?key=test-key`);
+      const response = await Router.route(statusRequest, env, ctx);
+      expect(response.status).toBe(200);
+      const json = await response.json();
+      expect(json[0].content).toBe('test post');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
