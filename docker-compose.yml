@@ -54,11 +54,10 @@ services:
       target: gemini-container
     volumes:
       - .:/app
+      - ~/.gemini:/root/.gemini # Config?
       - /app/node_modules
-      - ~/.config/gcloud:/root/.config/gcloud # Persistent Auth
     environment:
       - NODE_ENV=development
-      - GOOGLE_GENAI_USE_GCA=1
     stdin_open: true
     tty: true
     # Profiles allow you to start this only when needed

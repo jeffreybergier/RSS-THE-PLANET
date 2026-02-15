@@ -1,3 +1,8 @@
+export const Endpoint = {
+  proxy: "/proxy/",
+  opml: "/opml/"
+};
+
 export class Service {
   /**
    * Determines if this service can handle the given request.
