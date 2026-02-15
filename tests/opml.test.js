@@ -124,7 +124,7 @@ describe('OPML Service Integration', () => {
     const id = opmlEntry.key; // Key is the UUID
 
     // 3. Download
-    const downloadRequest = new Request(`http://example.com/opml/?action=download&id=${id}&key=test-key`);
+    const downloadRequest = new Request(`http://example.com/opml/${id}/download?key=test-key`);
     const downloadResponse = await Router.route(downloadRequest, env, ctx);
     expect(downloadResponse.status).toBe(200);
     expect(downloadResponse.headers.get('Content-Disposition')).toContain('saved.opml');
@@ -133,7 +133,7 @@ describe('OPML Service Integration', () => {
     expect(downloadedText).toBe(opmlContent);
 
     // 4. Convert (Rewritten Download)
-    const convertRequest = new Request(`http://example.com/opml/?action=convert&id=${id}&key=test-key`);
+    const convertRequest = new Request(`http://example.com/opml/${id}/convert?key=test-key`);
     const convertResponse = await Router.route(convertRequest, env, ctx);
     expect(convertResponse.status).toBe(200);
     expect(convertResponse.headers.get('Content-Disposition')).toContain('proxied_saved.opml');
@@ -170,7 +170,7 @@ describe('OPML Service Integration', () => {
     // Note: In our mock setup, 'wrong-key' fails the initial check (is invalid key), so returns 401.
     // If we had a valid key 'user-b' that was NOT the owner, it would pass the first check 
     // but fail the metadata check (also 401 now).
-    const downloadRequest = new Request(`http://example.com/opml/?action=download&id=${id}&key=wrong-key`);
+    const downloadRequest = new Request(`http://example.com/opml/${id}/download?key=wrong-key`);
     const downloadResponse = await Router.route(downloadRequest, env, ctx);
     expect(downloadResponse.status).toBe(401);
   });

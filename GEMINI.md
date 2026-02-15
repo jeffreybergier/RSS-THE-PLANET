@@ -1,0 +1,5 @@
+- this project was originally called insecure-xml-proxy but is now called RSS-THE-PLANET
+- Please never touch KVS.js as this file contains a lot of sensitive auth code
+- Avoid changing logic inside of existing function. You can change arguments and things like that but the actual logic can be sensitive
+- Always run both 'npm test' (Wrangler) and 'npm run test:node' (Node.js) before finishing a task.
+- do not run tests/proxy-test-end2end-w3c-validation.js because those require a separate server to be running

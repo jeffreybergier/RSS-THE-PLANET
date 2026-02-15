@@ -1,5 +1,4 @@
-
-import * as Auth from './auth.js';
+import { Endpoint } from '../serve/service.js';
 import * as Crypto from '../adapt/crypto.js';
 import { Option } from './option.js';
 
@@ -91,14 +90,14 @@ export class Codec {
       : sanitized;
   }
 
-  static encode(targetURL, targetOption, baseURL, authorizedAPIKey) {  
+  static encode(targetURL, targetOption, baseURL, authKey) {  
     if (!(targetURL  instanceof URL)
      || !(baseURL instanceof URL)
-     || typeof authorizedAPIKey !== "string") 
-    { throw new Error(`Parameter Error: targetURL(${targetURL}), baseURL(${baseURL}), targetOption(${targetOption}), authorizedAPIKey(${authorizedAPIKey})`); }
+     || typeof authKey !== "string") 
+    { throw new Error(`Parameter Error: targetURL(${targetURL}), baseURL(${baseURL}), targetOption(${targetOption}), authKey(${authKey})`); }
     
-    if (!baseURL.toString().endsWith(Auth.PROXY_VALID_PATH)) {
-      console.log(`[WARNING] BaseURL does not end with ${Auth.PROXY_VALID_PATH}: ${baseURL.toString()}`);
+    if (!baseURL.toString().endsWith(Endpoint.proxy)) {
+      console.log(`[WARNING] BaseURL does not end with ${Endpoint.proxy}: ${baseURL.toString()}`);
     }
     
     // get the target filename
@@ -113,7 +112,7 @@ export class Codec {
     // construct the encoded url
     const encodedPath = `${targetEncoded}/${fileName}`;
     const encodedURL = new URL(encodedPath, baseURL);
-    encodedURL.searchParams.set("key", authorizedAPIKey);
+    encodedURL.searchParams.set("key", authKey);
     if (targetOption) encodedURL.searchParams.set("option", targetOption);
     
     return encodedURL;
