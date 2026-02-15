@@ -134,7 +134,7 @@ export class MastoService extends Service {
         <p>Please enter your API Key to access the Mastodon Service.</p>
         <form id="masto-form" action="${actionUrl}" method="GET">
           <p>
-            <label for="key">API Key:</label><br>
+            <label for="key">API Key:</label>
             <div class="input-group">
               <input type="text" id="key" name="key" value="${key}" oninput="updateAction()">
               <button type="button" class="secondary" onclick="window.location.href='${Endpoint.masto}?key=' + encodeURIComponent(document.getElementById('key').value)">Update</button>
@@ -180,18 +180,18 @@ export class MastoService extends Service {
         <p>Save your Mastodon server and API key to convert your timeline to RSS.</p>
         <form id="masto-form" action="${actionUrl}" method="POST">
           <p>
-            <label for="key">API Key (if not in URL):</label><br>
+            <label for="key">API Key (if not in URL):</label>
             <div class="input-group">
               <input type="text" id="key" name="key" value="${key}" oninput="updateAction()">
               <button type="button" class="secondary" onclick="window.location.href='${Endpoint.masto}?key=' + encodeURIComponent(document.getElementById('key').value)">Update</button>
             </div>
           </p>
           <p>
-            <label for="server">Mastodon Server URL:</label><br>
+            <label for="server">Mastodon Server URL:</label>
             <input type="text" id="server" name="server" placeholder="https://mastodon.social" required>
           </p>
           <p>
-            <label for="apiKey">Mastodon API Key:</label><br>
+            <label for="apiKey">Mastodon API Key:</label>
             <input type="text" id="apiKey" name="apiKey" placeholder="Your Mastodon Access Token" required>
           </p>
           <p>
