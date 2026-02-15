@@ -1,5 +1,3 @@
-export const PROXY_VALID_PATH = "/proxy/";
-export const OPML_VALID_PATH = "/opml/";
 
 export class Auth {
 

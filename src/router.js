@@ -1,7 +1,7 @@
 import { ProxyService } from './serve/proxy.js';
 import { OPMLService } from './serve/opml.js';
 import { renderError } from './ui/error.js';
-import * as Auth from './lib/auth.js';
+import { Auth } from './lib/auth.js';
 
 const SERVICES = [
   ProxyService,
@@ -9,7 +9,7 @@ const SERVICES = [
 ];
 
 export async function route(request, env, ctx) {
-  Auth.AUTH_LOAD(env);
+  Auth.load(env);
   
   for (const ServiceClass of SERVICES) {
     if (ServiceClass.canHandle(request)) {

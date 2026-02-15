@@ -1,5 +1,5 @@
-import { Service } from './service.js';
-import * as Auth from '../lib/auth.js';
+import { Service, Endpoint } from './service.js';
+import { Auth } from '../lib/auth.js';
 import { HTMLRewriter } from '../adapt/html-rewriter.js';
 import { Codec } from '../lib/codec.js';
 import { Option } from '../lib/option.js';
@@ -12,17 +12,17 @@ import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 export class ProxyService extends Service {
   static canHandle(request) {
     const url = new URL(request.url);
-    return url.pathname.startsWith(Auth.PROXY_VALID_PATH);
+    return url.pathname.startsWith(Endpoint.proxy);
   }
 
   constructor(request, env, ctx) {
     super(request, env, ctx);
     this.requestURL = new URL(request.url);
-    this.baseURL = new URL(Auth.PROXY_VALID_PATH, this.requestURL.origin);
+    this.baseURL = new URL(Endpoint.proxy, this.requestURL.origin);
     this.requestHeaders = ProxyService.sanitizedRequestHeaders(request.headers);
     this.requestMethod = request.method;
     this.isLegacyClient = ProxyService.isLegacyUserAgent(request.headers.get("User-Agent"));
-    this.authorizedAPIKey = ProxyService.getAuthorizedAPIKey(this.requestURL.searchParams.get('key'));
+    this.authKey = null;
   }
 
   static isLegacyUserAgent(userAgent) {
@@ -44,42 +44,40 @@ export class ProxyService extends Service {
     return legacyAgents.some(s => userAgent.includes(s));
   }
 
-  static getAuthorizedAPIKey(apiKey) {
-    if (!apiKey) return null;
-    return Auth.VALID_KEYS.has(apiKey) ? apiKey : null;
-  }
-
   async handleRequest() {
     try {
-      // 0. URL Parameters
+      // 0. Auth check
+      this.authKey = await Auth.validate(this.request);
+
+      // 1. URL Parameters
       const _targetURL = Codec.decode(this.requestURL);
       const _submittedURL = URL.parse(this.requestURL.searchParams.get('url'));
       this.targetURL = (_targetURL) ? _targetURL : _submittedURL;
       this.option = Option.getOption(this.requestURL.searchParams.get('option'));
 
-      // 1. If we have no target URL, just return the submit form
+      // 2. If we have no target URL, just return the submit form
       if (!this.targetURL) return this.getSubmitForm();
 
-      // 2. Check that we are authorized
-      if (!this.authorizedAPIKey) {
+      // 3. Check that we are authorized
+      if (!this.authKey) {
         return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
       }
 
-      // 3. Automatically determine option if needed
+      // 4. Automatically determine option if needed
       if (this.option === Option.auto) {
         console.log(`[ProxyService.handleRequest] autodetecting: ${this.targetURL.toString()}`);
         this.option = await Option.fetchAutoOption(this.targetURL);
         console.log(`[ProxyService.handleRequest] autodetected: Option.${this.option}`);
       }
 
-      // 4. See if someone is submitting a form for a new URL
+      // 5. See if someone is submitting a form for a new URL
       if (_submittedURL) return await this.getSubmitResult();
 
       if (!this.option) {
         return renderError(502, "The target could not be reached", this.targetURL.pathname);
       }
 
-      // 5. Go through the options and service them
+      // 6. Go through the options and service them
       if (this.option === Option.feed) return this.getFeed();
       if (this.option === Option.asset) return this.getAsset();
       if (this.option === Option.image) return this.getImage();
@@ -96,7 +94,7 @@ export class ProxyService extends Service {
     const content = `
       <h2>RSS THE PLANET: Proxy</h2>
       <h2>Generate Proxy URL</h2>
-      <form action="${Auth.PROXY_VALID_PATH}" method="GET">
+      <form action="${Endpoint.proxy}" method="GET">
         <p>
           <label for="key">API Key:</label>
           <input type="text" id="key" name="key">
@@ -133,9 +131,9 @@ export class ProxyService extends Service {
   async getSubmitResult() { 
     if (!(this.targetURL instanceof URL) 
      || !(this.baseURL instanceof URL) 
-     || !this.authorizedAPIKey) 
-    { throw new Error("Parameter Error: submittedURL, baseURL, authorizedAPIKey"); }
-    const encodedURL = Codec.encode(this.targetURL, this.option, this.baseURL, this.authorizedAPIKey);
+     || !this.authKey) 
+    { throw new Error("Parameter Error: submittedURL, baseURL, authKey"); }
+    const encodedURL = Codec.encode(this.targetURL, this.option, this.baseURL, this.authKey);
     const bodyContent = `${encodedURL.toString()}`;
     return new Response(bodyContent, {
       headers: { "Content-Type": "text/plain" },
@@ -148,8 +146,8 @@ export class ProxyService extends Service {
      || !(this.baseURL instanceof URL)
      || !this.requestHeaders
      || !this.requestMethod
-     || typeof this.authorizedAPIKey !== "string") 
-     { throw new Error("Parameter Error: targetURL, baseURL, requestHeaders, requestMethod, authorizedAPIKey"); }
+     || typeof this.authKey !== "string") 
+     { throw new Error("Parameter Error: targetURL, baseURL, requestHeaders, requestMethod, authKey"); }
     
     let requestHeaders = ProxyService.sanitizedRequestHeaders(this.requestHeaders);
     if (this.requestMethod !== "GET") {
@@ -200,8 +198,8 @@ export class ProxyService extends Service {
      || !(this.baseURL instanceof URL)
      || !this.requestHeaders
      || !this.requestMethod
-     || typeof this.authorizedAPIKey !== "string") 
-     { throw new Error("Parameter Error: targetURL, baseURL, requestHeaders, requestMethod, authorizedAPIKey"); }
+     || typeof this.authKey !== "string") 
+     { throw new Error("Parameter Error: targetURL, baseURL, requestHeaders, requestMethod, authKey"); }
     
     let requestHeaders = ProxyService.sanitizedRequestHeaders(this.requestHeaders);
     if (this.requestMethod !== "GET") {
@@ -240,8 +238,8 @@ export class ProxyService extends Service {
     if (!(this.targetURL instanceof URL)
      || !this.requestHeaders
      || !this.requestMethod
-     || typeof this.authorizedAPIKey !== "string") 
-    { throw new Error("Parameter Error: targetURL, requestHeaders, requestMethod, authorizedAPIKey"); }
+     || typeof this.authKey !== "string") 
+    { throw new Error("Parameter Error: targetURL, requestHeaders, requestMethod, authKey"); }
     
     const headers = ProxyService.sanitizedRequestHeaders(this.requestHeaders);
     console.log(`[ProxyService.asset] passing through: ${this.targetURL.toString()}`);
@@ -258,8 +256,8 @@ export class ProxyService extends Service {
     if (!(this.targetURL instanceof URL)
      || !this.requestHeaders
      || !this.requestMethod
-     || typeof this.authorizedAPIKey !== "string") 
-    { throw new Error("Parameter Error: targetURL, requestHeaders, requestMethod, authorizedAPIKey"); }
+     || typeof this.authKey !== "string") 
+    { throw new Error("Parameter Error: targetURL, requestHeaders, requestMethod, authKey"); }
     
     const headers = ProxyService.sanitizedRequestHeaders(this.requestHeaders);
     
@@ -313,7 +311,7 @@ export class ProxyService extends Service {
       if (typeof rawValue !== "string") return;
       const rawURL = URL.parse(rawValue.trim());
       if (!rawURL) return;
-      const finalURL = Codec.encode(rawURL, option, this.baseURL, this.authorizedAPIKey);
+      const finalURL = Codec.encode(rawURL, option, this.baseURL, this.authKey);
       const finalURLString = finalURL.toString();
       parent[key] = (typeof target === "object" && "__cdata" in target) 
                   ? { "__cdata": finalURLString } 
@@ -322,8 +320,8 @@ export class ProxyService extends Service {
     
     if (!(this.baseURL instanceof URL)
      || typeof originalXML !== "string"
-     || typeof this.authorizedAPIKey !== "string") 
-    { throw new Error("Parameter Error: baseURL, originalXML, authorizedAPIKey"); }
+     || typeof this.authKey !== "string") 
+    { throw new Error("Parameter Error: baseURL, originalXML, authKey"); }
     
     // 1. Create Parser and Builder
     const parser = new XMLParser({ 
@@ -405,7 +403,7 @@ export class ProxyService extends Service {
         if (link["@_type"]?.toLowerCase().includes("audio")) option = Option.asset;
                 if (link["@_type" ]?.toLowerCase().includes("image")) option = Option.image;
                 if (link["@_rel" ]?.toLowerCase().includes("self" )) option = Option.feed;
-                link["@_href"] = Codec.encode(linkURL, option, this.baseURL, this.authorizedAPIKey).toString();
+                link["@_href"] = Codec.encode(linkURL, option, this.baseURL, this.authKey).toString();
         
       }
       
@@ -440,7 +438,7 @@ export class ProxyService extends Service {
           if (link["@_type"]?.toLowerCase().includes("atom" )) option = Option.feed;
           if (link["@_type"]?.toLowerCase().includes("audio")) option = Option.asset;
           if (link["@_type"]?.toLowerCase().includes("image")) option = Option.image;
-          link["@_href"] = Codec.encode(linkURL, option, this.baseURL, this.authorizedAPIKey).toString();
+          link["@_href"] = Codec.encode(linkURL, option, this.baseURL, this.authKey).toString();
         }
         
         // 6.3 Rewrite the HTML in summaries and descriptions
@@ -472,7 +470,7 @@ export class ProxyService extends Service {
           if (href) {
             const target = URL.parse(href, this.targetURL);
             if (target) {
-              const proxied = Codec.encode(target, Option.auto, this.baseURL, this.authorizedAPIKey);
+              const proxied = Codec.encode(target, Option.auto, this.baseURL, this.authKey);
               el.setAttribute('href', proxied.toString());
             }
           }
@@ -496,7 +494,7 @@ export class ProxyService extends Service {
           if (src) {
             const target = URL.parse(src, this.targetURL);
             if (target) {
-              const proxied = Codec.encode(target, Option.image, this.baseURL, this.authorizedAPIKey);
+              const proxied = Codec.encode(target, Option.image, this.baseURL, this.authKey);
               el.setAttribute('src', proxied.toString());
             }
           }
@@ -509,7 +507,7 @@ export class ProxyService extends Service {
           if (src) {
             const target = URL.parse(src, this.targetURL);
             if (target) {
-              const proxied = Codec.encode(target, Option.asset, this.baseURL, this.authorizedAPIKey);
+              const proxied = Codec.encode(target, Option.asset, this.baseURL, this.authKey);
               el.setAttribute('src', proxied.toString());
             }
           }
@@ -522,7 +520,7 @@ export class ProxyService extends Service {
           if (href) {
             const target = URL.parse(href, this.targetURL);
             if (target) {
-              const proxied = Codec.encode(target, Option.asset, this.baseURL, this.authorizedAPIKey);
+              const proxied = Codec.encode(target, Option.asset, this.baseURL, this.authKey);
               el.setAttribute('href', proxied.toString());
             }
           }
@@ -558,7 +556,7 @@ export class ProxyService extends Service {
             if (winner && winner.url) {
               const target = URL.parse(winner.url, this.targetURL);
               if (target) {
-                const proxied = Codec.encode(target, Option.image, this.baseURL, this.authorizedAPIKey);
+                const proxied = Codec.encode(target, Option.image, this.baseURL, this.authKey);
                 el.setAttribute('src', proxied.toString());
               }
             }
