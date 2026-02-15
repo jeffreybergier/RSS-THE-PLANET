@@ -1,8 +1,11 @@
 import { Service, Endpoint } from './service.js';
 import { Auth } from '../lib/auth.js';
+import { Codec } from '../lib/codec.js';
+import { Option } from '../lib/option.js';
 import { renderError } from '../ui/error.js';
 import { renderLayout } from '../ui/theme.js';
 import { KVSAdapter, KVSValue } from '../adapt/kvs.js';
+import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
 // MARK: MastoService Class
 
@@ -15,6 +18,7 @@ export class MastoService extends Service {
   constructor(request, env, ctx) {
     super(request, env, ctx);
     this.requestURL = new URL(request.url);
+    this.baseURL = new URL(Endpoint.proxy, this.requestURL.origin);
     this.authKey = null;
     this.kvs = null;
 
@@ -111,10 +115,167 @@ export class MastoService extends Service {
       return renderError(400, "Invalid status type", this.requestURL.pathname);
     }
 
-    const apiUrl = new URL(apiPath, server);
-    return await fetch(apiUrl, {
-      headers: { "Authorization": `Bearer ${apiKey}` }
+    let allStatuses = [];
+    let maxId = null;
+    let attempts = 0;
+    const maxAttempts = 5; // Safety guard
+
+    while (allStatuses.length < 100 && attempts < maxAttempts) {
+      const apiUrl = new URL(apiPath, server);
+      if (maxId) {
+        apiUrl.searchParams.set('max_id', maxId);
+      }
+
+      const response = await fetch(apiUrl, {
+        headers: { "Authorization": `Bearer ${apiKey}` }
+      });
+
+      if (!response.ok) {
+        if (allStatuses.length > 0) break; // Return what we have if a middle page fails
+        return response;
+      }
+
+      const statuses = await response.json();
+      if (!Array.isArray(statuses) || statuses.length === 0) break;
+
+      allStatuses = allStatuses.concat(statuses);
+      
+      // Get the last ID for the next page
+      maxId = statuses[statuses.length - 1].id;
+      attempts++;
+
+      // If we got exactly the same number of items as before, or very few, 
+      // we might be hitting a limit or loop, but usually Mastodon is reliable here.
+    }
+
+    // Trim to exactly 100 if we went over
+    if (allStatuses.length > 100) {
+      allStatuses = allStatuses.slice(0, 100);
+    }
+
+    const rss = this.convertJSONtoRSS(allStatuses, this.subtype);
+
+    return new Response(rss, {
+      headers: {
+        "Content-Type": "application/rss+xml; charset=utf-8"
+      }
     });
+  }
+
+  convertJSONtoRSS(json, subtype) {
+    if (!Array.isArray(json)) return "";
+
+    const builder = new XMLBuilder({
+      ignoreAttributes: false,
+      attributeNamePrefix: "@_",
+      format: true,
+      suppressEmptyNode: true,
+      cdataPropName: "__cdata"
+    });
+
+    const items = json.map(status => {
+      const isBoost = !!status.reblog;
+      const data = isBoost ? status.reblog : status;
+      const author = data.account;
+      
+      // 1. Proxy the avatar
+      let proxiedAvatar = "";
+      try {
+        proxiedAvatar = Codec.encode(new URL(author.avatar), Option.image, this.baseURL, this.authKey).toString();
+      } catch (e) {
+        proxiedAvatar = author.avatar;
+      }
+
+      // 2. Build plain HTML content
+      let html = `
+        <div>
+          <div>
+            <img src="${proxiedAvatar}" width="48" height="48" alt="${author.display_name}">
+            <div>
+              <strong>${author.display_name || author.username}</strong><br>
+              <a href="${author.url}">@${author.acct}</a>
+            </div>
+          </div>
+          <br>
+      `;
+
+      if (isBoost) {
+        html = `<p>🔄 Boosted by ${status.account.display_name || status.account.username}</p>` + html;
+      }
+
+      // Add the actual post content
+      html += `<div>${data.content}</div>`;
+
+      // 3. Handle Media Attachments
+      if (data.media_attachments && data.media_attachments.length > 0) {
+        html += '<div class="media">';
+        data.media_attachments.forEach(media => {
+          try {
+            const altText = media.description || '';
+            if (media.type === 'image') {
+              const proxiedMedia = Codec.encode(new URL(media.url), Option.image, this.baseURL, this.authKey).toString();
+              html += `<p><img src="${proxiedMedia}" alt="${altText}"></p>`;
+            } else {
+              // video, gifv, audio, unknown
+              const proxiedLink = Codec.encode(new URL(media.url), Option.auto, this.baseURL, this.authKey).toString();
+              const linkTitle = altText ? `View ${media.type}: ${altText}` : `View ${media.type} attachment`;
+              html += `<p><a href="${proxiedLink}">${linkTitle}</a></p>`;
+            }
+          } catch (e) {
+            console.error(`[MastoService.convertJSONtoRSS] Media Error: ${e.message} url: ${media.url}`);
+            html += `<p><a href="${media.url}">View ${media.type} attachment</a></p>`;
+          }
+        });
+        html += '</div>';
+      }
+
+      html += `
+        <hr>
+        <p>
+          Replies: ${data.replies_count || 0} | 
+          Boosts: ${data.reblogs_count || 0} | 
+          Favorites: ${data.favourites_count || 0}
+        </p>
+      </div>`;
+
+      // 4. Generate a clean title
+      const cleanText = data.content.replace(/<[^>]*>/g, '').trim();
+      const titleSnippet = cleanText.length > 60 ? cleanText.substring(0, 60) + "..." : cleanText;
+      const displayTitle = `${author.display_name || author.username}: ${titleSnippet || "Post"}`;
+
+      return {
+        title: isBoost ? `🔄 ${displayTitle}` : displayTitle,
+        link: data.url,
+        guid: {
+          "@_isPermaLink": "true",
+          "#text": data.url
+        },
+        pubDate: new Date(data.created_at).toUTCString(),
+        description: { "__cdata": html },
+        author: `${author.acct} (${author.display_name || author.username})`
+      };
+    });
+
+    const channelTitle = `Mastodon ${subtype.toUpperCase()} - ${this.requestURL.hostname}`;
+    const rssObj = {
+      "?xml": { "@_version": "1.0", "@_encoding": "UTF-8" },
+      rss: {
+        "@_version": "2.0",
+        "@_xmlns:content": "http://purl.org/rss/1.0/modules/content/",
+        "@_xmlns:dc": "http://purl.org/dc/elements/1.1/",
+        channel: {
+          title: channelTitle,
+          link: this.requestURL.origin,
+          description: `RSS THE PLANET: Mastodon ${subtype} feed`,
+          language: "en-us",
+          lastBuildDate: new Date().toUTCString(),
+          generator: "RSS THE PLANET MastoService",
+          item: items
+        }
+      }
+    };
+
+    return builder.build(rssObj);
   }
 
   async handlePost() {

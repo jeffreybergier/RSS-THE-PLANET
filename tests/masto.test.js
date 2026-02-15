@@ -84,7 +84,20 @@ describe('Masto Service Integration', () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (url) => {
       if (url.toString().includes('/api/v1/timelines/home')) {
-        return new Response(JSON.stringify([{ id: '1', content: 'test post' }]), {
+        return new Response(JSON.stringify([{ 
+          id: '1', 
+          created_at: new Date().toISOString(),
+          url: 'https://mastodon.test/@user/1',
+          content: '<p>test post</p>',
+          account: {
+            username: 'testuser',
+            acct: 'testuser',
+            display_name: 'Test User',
+            avatar: 'https://mastodon.test/avatar.png',
+            url: 'https://mastodon.test/@user'
+          },
+          media_attachments: []
+        }]), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }
         });
@@ -96,8 +109,14 @@ describe('Masto Service Integration', () => {
       const statusRequest = new Request(`http://example.com/masto/${id}/status/home?key=test-key`);
       const response = await Router.route(statusRequest, env, ctx);
       expect(response.status).toBe(200);
-      const json = await response.json();
-      expect(json[0].content).toBe('test post');
+      expect(response.headers.get('Content-Type')).toContain('application/rss+xml');
+      
+      const xml = await response.text();
+      expect(xml).toContain('<rss');
+      expect(xml).toContain('<channel>');
+      expect(xml).toContain('test post');
+      // Verify avatar is present
+      expect(xml).toContain('avatar.png'); 
     } finally {
       globalThis.fetch = originalFetch;
     }
