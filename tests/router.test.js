@@ -5,7 +5,7 @@ describe('Router Integration', () => {
   // We mock the env object that Cloudflare or Node-boot would provide
   const env = {
     VALID_KEYS: '["test-key"]',
-    URL_STORE: null
+    RSS_THE_PLANET_KVS: new Map()
   };
   const ctx = {};
 

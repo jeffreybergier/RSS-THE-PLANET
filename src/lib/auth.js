@@ -4,15 +4,20 @@ export const OPML_VALID_PATH = "/opml/";
 export let VALID_KEYS = null;
 
 export function AUTH_LOAD(env) {
-  if (VALID_KEYS) { 
-    console.log(`[routes.auth] Recycled: ${VALID_KEYS.size}`);
-    return; 
+  if (VALID_KEYS instanceof Set) {
+    console.log(`[AUTH] Recycled: ${VALID_KEYS.size}`);
+    return;
   }
+
   try {
-    VALID_KEYS = new Set(JSON.parse(env.VALID_KEYS));
-    console.log(`[routes.auth] Loaded: ${VALID_KEYS.size}`);
+    const keys = JSON.parse(env.VALID_KEYS);
+    if (!Array.isArray(keys) || keys.length === 0) {
+      throw new Error("Invalid keys: must be a non-empty array");
+    }
+    VALID_KEYS = new Set(keys);
+    console.log(`[AUTH] Loaded: ${VALID_KEYS.size}`);
   } catch (e) {
-    console.error(`[routes.auth] Failed ${e.message}`);
-    VALID_KEYS = new Set();
+    console.error(`[AUTH] Failed: VALID_KEYS: ${e.message}`);
+    throw e;
   }
 }

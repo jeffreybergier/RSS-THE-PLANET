@@ -119,45 +119,7 @@ export class Codec {
     return encodedURL;
   }
 
-  static async encodeHeavy(targetURL, targetOption, baseURL, authorizedAPIKey, isLegacyClient, kvs) {  
-    if (!(targetURL  instanceof URL)
-     || !(baseURL instanceof URL)
-     || typeof authorizedAPIKey !== "string") 
-    { throw new Error(`Parameter Error: targetURL(${targetURL}), baseURL(${baseURL}), targetOption(${targetOption}), authorizedAPIKey(${authorizedAPIKey})`); }
-    
-    if (!baseURL.toString().endsWith(Auth.PROXY_VALID_PATH)) {
-      console.log(`[WARNING] BaseURL does not end with ${Auth.PROXY_VALID_PATH}: ${baseURL.toString()}`);
-    }
-    
-    // Get the easy encodedURL
-    let encodedURL = Codec.encode(targetURL, targetOption, baseURL, authorizedAPIKey);
-    if (!isLegacyClient) return encodedURL;
-    
-    if (encodedURL.toString().length >= 255 && kvs) {
-      // hash the targetURL
-      const strippedTargetURL = Codec.stripTracking(targetURL);
-      const targetURLString = strippedTargetURL.toString();
-      const _targetEncoded = await Crypto.md5(targetURLString);
-      const targetEncoded = "KV-" + _targetEncoded;
-      
-      // Store the url in the KVS
-      await kvs.put(targetEncoded, targetURLString);
-      
-      // get the target filename
-      const fileName = Codec.sanitizeFileName(strippedTargetURL.pathname, targetOption);
-      
-      // construct the encoded url
-      const encodedPath = `${targetEncoded}/${fileName}`;
-      encodedURL = new URL(encodedPath, baseURL);
-      encodedURL.searchParams.set("key", authorizedAPIKey);
-      if (targetOption) encodedURL.searchParams.set("option", targetOption);
-      console.log(`[Codec.encode.heavy] KVS.put { ${targetEncoded} : ${targetURLString} }`);
-    }
-    
-    return encodedURL;
-  }
-
-  static async decode(requestURL, kvs) {
+  static decode(requestURL) {
     if (!(requestURL instanceof URL)) throw new Error("Parameter Error: Invalid URL");
     
     // url.pathname ignores the query string (?key=...) 
@@ -173,21 +135,6 @@ export class Codec {
       return null; 
     }
     const targetEncoded = pathComponents[proxyIndex + 1];
-      
-    // First try to fetch from KVS
-    if (targetEncoded.startsWith("KV-") && kvs) {
-      try {
-        const targetURLString = await kvs.get(targetEncoded);
-        console.log(`[Codec.decode] KVS.get { ${targetEncoded} : ${targetURLString} }`);
-        const targetURL = new URL(targetURLString);
-        return targetURL;
-      } catch (error) {
-        console.error(`[Codec.decode] KVS.get failed ${error.message}`);
-        return null;
-      }
-    }
-    
-    // Fall back to base64 decoding
     try {
       const targetBase = decodeURIComponent(targetEncoded);
       const targetURI = atob(targetBase);

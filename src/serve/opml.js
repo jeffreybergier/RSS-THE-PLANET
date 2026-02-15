@@ -4,7 +4,7 @@ import { Codec } from '../lib/codec.js';
 import { Option } from '../lib/option.js';
 import { renderError } from '../ui/error.js';
 import { renderLayout } from '../ui/theme.js';
-import { KVSAdapter } from '../adapt/kvs.js';
+import { KVSAdapter, KVSValue, KVSMeta } from '../adapt/kvs.js';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
 // MARK: OPMLService Class
@@ -20,7 +20,11 @@ export class OPMLService extends Service {
     this.requestURL = new URL(request.url);
     this.baseURL = new URL(Auth.PROXY_VALID_PATH, this.requestURL.origin);
     this.authorizedAPIKey = ProxyService_getAuthorizedAPIKey(this.requestURL.searchParams.get('key'));
-    this.kvs = new KVSAdapter(env.URL_STORE);
+    try {
+      this.kvs = new KVSAdapter(env, "OPML", this.authorizedAPIKey);
+    } catch {
+      this.kvs = null;
+    }
   }
 
   async handleRequest() {
@@ -36,12 +40,43 @@ export class OPMLService extends Service {
       if (action === 'convert') {
         return await this.handleConvert();
       }
+      if (action === 'delete') {
+        return await this.handleDelete();
+      }
 
       return await this.getSubmitForm();
     } catch (error) {
       console.error(`[OPMLService.handleRequest] Internal Error: ${error.message}`);
       return renderError(500, "An internal server error occurred", this.requestURL.pathname);
     }
+  }
+
+  async handleDelete() {
+    if (!this.authorizedAPIKey || !this.kvs) {
+      return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
+    }
+    const id = this.requestURL.searchParams.get('id');
+    if (!id) {
+      return renderError(400, "File ID is required", this.requestURL.pathname);
+    }
+
+    // Attempt delete (adapter handles ownership check)
+    try {
+      await this.kvs.delete(id);
+    } catch (e) {
+      console.error(`[OPMLService.handleDelete] Error: ${e.message}`);
+      // We might want to return an error, or just redirect if it was already gone/unauthorized
+      // For security, treating unauthorized delete as silent or generic error is often better.
+      return renderError(400, "Could not delete file", this.requestURL.pathname);
+    }
+
+    // Redirect back to the list
+    return new Response(null, {
+      status: 302,
+      headers: {
+        "Location": `${Auth.OPML_VALID_PATH}?key=${this.authorizedAPIKey}`
+      }
+    });
   }
 
   async handleConvert() {
@@ -53,18 +88,13 @@ export class OPMLService extends Service {
       return renderError(400, "File ID is required", this.requestURL.pathname);
     }
 
-    const key = `OPML::${id}`;
-    const { value: content, metadata } = await this.kvs.getWithMetadata(key);
-    
-    if (!content) {
-      return renderError(404, "File not found", this.requestURL.pathname);
+    const entry = await this.kvs.get(id);
+    if (!entry) {
+      return renderError(404, "File not found or unauthorized", this.requestURL.pathname);
     }
 
-    if (metadata?.key && metadata.key !== this.authorizedAPIKey) {
-      return renderError(401, "You do not have permission to access this file", this.requestURL.pathname);
-    }
-
-    const name = metadata?.filename || 'download.opml';
+    const name = entry.name;
+    const content = entry.value;
 
     const rewrittenOpml = this.rewriteOPML(content, this.authorizedAPIKey);
     if (!rewrittenOpml) {
@@ -89,18 +119,13 @@ export class OPMLService extends Service {
       return renderError(400, "File ID is required", this.requestURL.pathname);
     }
 
-    const key = `OPML::${id}`;
-    const { value: content, metadata } = await this.kvs.getWithMetadata(key);
-    
-    if (!content) {
-      return renderError(404, "File not found", this.requestURL.pathname);
+    const entry = await this.kvs.get(id);
+    if (!entry) {
+      return renderError(404, "File not found or unauthorized", this.requestURL.pathname);
     }
 
-    if (metadata?.key && metadata.key !== this.authorizedAPIKey) {
-      return renderError(401, "You do not have permission to access this file", this.requestURL.pathname);
-    }
-
-    const name = metadata?.filename || 'download.opml';
+    const name = entry.name;
+    const content = entry.value;
 
     return new Response(content, {
       headers: {
@@ -151,33 +176,29 @@ export class OPMLService extends Service {
         </form>
       `;
     } else {
-      const list = await this.kvs.list({ prefix: "OPML::" });
-      // Sort by filename (metadata) or ID if missing
-      const files = list.keys
-        .filter(k => k.metadata?.key === this.authorizedAPIKey)
-        .map(k => ({
-          id: k.name.replace("OPML::", ""),
-          name: k.metadata?.filename || k.name.replace("OPML::", "")
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name));
-      
+      const entries = await this.kvs.list();
       let tableRows = '';
-      if (files.length === 0) {
+      if (entries.length === 0) {
         tableRows = `<tr class="empty-state"><td colspan="3">No OPML Files Saved.</td></tr>`;
       } else {
-        tableRows = files.map(f => `
+        tableRows = entries.map(f => `
           <tr>
-            <td class="id-col">${f.id}</td>
+            <td class="id-col">${f.key}</td>
             <td><strong>${f.name}</strong></td>
             <td class="actions">
-              <a href="${Auth.OPML_VALID_PATH}?action=download&id=${encodeURIComponent(f.id)}&key=${this.authorizedAPIKey}" 
+              <a href="${Auth.OPML_VALID_PATH}?action=download&id=${encodeURIComponent(f.key)}&key=${this.authorizedAPIKey}" 
                  class="download-link action-link" 
-                 data-id="${f.id}"
+                 data-id="${f.key}"
                  data-action="download">Original</a>
-              <a href="${Auth.OPML_VALID_PATH}?action=convert&id=${encodeURIComponent(f.id)}&key=${this.authorizedAPIKey}" 
+              <a href="${Auth.OPML_VALID_PATH}?action=convert&id=${encodeURIComponent(f.key)}&key=${this.authorizedAPIKey}" 
                  class="download-link action-link primary" 
-                 data-id="${f.id}"
+                 data-id="${f.key}"
                  data-action="convert">Convert</a>
+              <a href="${Auth.OPML_VALID_PATH}?action=delete&id=${encodeURIComponent(f.key)}&key=${this.authorizedAPIKey}" 
+                 class="download-link action-link delete" 
+                 data-id="${f.key}"
+                 data-action="delete"
+                 onclick="return confirm('Are you sure you want to delete ${f.name}?');">Delete</a>
             </td>
           </tr>
         `).join('');
@@ -244,7 +265,6 @@ export class OPMLService extends Service {
     }
 
     // 2. Extract and validate API Key
-    // Try Body first, then Search Params
     const apiKeyBody = formData.get('key');
     const apiKeyURL = this.requestURL.searchParams.get('key');
     const apiKey = (apiKeyBody && typeof apiKeyBody === 'string' && apiKeyBody.length > 0) 
@@ -257,6 +277,9 @@ export class OPMLService extends Service {
       console.log(`[OPMLService.handlePost] Unauthorized: keySource(${apiKeyBody ? 'body' : (apiKeyURL ? 'url' : 'none')}) key(${apiKey})`);
       return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
     }
+
+    // Re-initialize KVSAdapter with the confirmed authorized key
+    this.kvs = new KVSAdapter(this.env, "OPML", authorizedAPIKey);
 
     // 3. Get the OPML file
     const file = formData.get('opml');
@@ -272,21 +295,17 @@ export class OPMLService extends Service {
     const mode = formData.get('mode');
     if (mode === 'save') {
       const filename = file.name || 'feeds.opml';
-      const uuid = crypto.randomUUID();
-      const key = `OPML::${uuid}`;
       
-      await this.kvs.put(key, opmlText, { 
-        allowOverwrite: true,
-        metadata: { 
-          filename,
-          key: authorizedAPIKey 
-        }
-      });
+      // ID will be generated automatically if null is passed
+      const newEntry = new KVSValue(null, filename, opmlText, "OPML", authorizedAPIKey);
+      const savedEntry = await this.kvs.put(newEntry);
+      
+      if (!savedEntry) throw new Error("Failed to save OPML");
       
       const content = `
         <h2>File Saved</h2>
         <p>The file <strong>${filename}</strong> has been saved to the store.</p>
-        <p>ID: ${uuid}</p>
+        <p>ID: ${savedEntry.key}</p>
         <p><a href="${Auth.OPML_VALID_PATH}?key=${authorizedAPIKey}">Back to OPML Rewriter</a></p>
       `;
       return new Response(renderLayout("RSS THE PLANET: Saved", content), {

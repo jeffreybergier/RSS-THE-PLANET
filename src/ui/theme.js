@@ -54,14 +54,54 @@ export const SHARED_CSS = `
   th { background: #f5f5f5; text-align: left; padding: 0.5rem; }
   td { padding: 0.5rem; border-bottom: 1px solid #eee; }
   td.id-col { font-family: monospace; font-size: 0.9em; color: #666; }
-  td.actions { text-align: right; }
+  td.actions { text-align: right; white-space: nowrap; }
   tr.empty-state td { padding: 1rem; text-align: center; color: #666; }
   
   /* Links */
   a { text-decoration: none; color: #1a73e8; }
   a:hover { text-decoration: underline; }
-  a.action-link { font-size: 0.9rem; margin-right: 1rem; color: #666; }
-  a.action-link.primary { color: #1a73e8; font-weight: bold; margin-right: 0; }
+  
+  /* Action Buttons (Table) */
+  a.action-link { 
+    display: inline-block;
+    text-decoration: none;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    margin-left: 0.25rem;
+    border: 1px solid #ddd;
+    color: #555;
+    background: #fff;
+    transition: background 0.1s, border-color 0.1s;
+  }
+  a.action-link:hover {
+    background: #f5f5f5;
+    text-decoration: none;
+    border-color: #ccc;
+  }
+  
+  /* Primary (Convert) */
+  a.action-link.primary {
+    background: #1a73e8;
+    color: white;
+    border-color: #1a73e8;
+    font-weight: 500;
+  }
+  a.action-link.primary:hover {
+    background: #1557b0;
+    border-color: #1557b0;
+  }
+  
+  /* Danger (Delete) */
+  a.action-link.delete {
+    color: #d32f2f;
+    border-color: #ef9a9a; /* Light red border */
+    background: white;
+  }
+  a.action-link.delete:hover {
+    background: #ffebee; /* Light red background */
+    border-color: #d32f2f;
+  }
 `;
 
 /**
