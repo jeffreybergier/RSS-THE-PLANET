@@ -1,5 +1,6 @@
+
 import * as Auth from './auth.js';
-import * as Crypto from '../adapters/crypto.js';
+import * as Crypto from '../adapt/crypto.js';
 import { Option } from './option.js';
 
 export class Codec {

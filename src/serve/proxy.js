@@ -1,9 +1,11 @@
 import { Service } from './service.js';
 import * as Auth from '../lib/auth.js';
-import { KVSAdapter } from '../adapters/kvs.js';
-import { HTMLRewriter } from '../adapters/html-rewriter.js';
+import { KVSAdapter } from '../adapt/kvs.js';
+import { HTMLRewriter } from '../adapt/html-rewriter.js';
 import { Codec } from '../lib/codec.js';
 import { Option } from '../lib/option.js';
+import { renderError } from '../ui/error.js';
+import { renderLayout } from '../ui/theme.js';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
 // MARK: ProxyService Class
@@ -50,81 +52,81 @@ export class ProxyService extends Service {
   }
 
   async handleRequest() {
-    // 0. URL Parameters
-    const _targetURL = await Codec.decode(this.requestURL, this.kvs);
-    const _submittedURL = URL.parse(this.requestURL.searchParams.get('url'));
-    this.targetURL = (_targetURL) ? _targetURL : _submittedURL;
-    this.option = Option.getOption(this.requestURL.searchParams.get('option'));
+    try {
+      // 0. URL Parameters
+      const _targetURL = await Codec.decode(this.requestURL, this.kvs);
+      const _submittedURL = URL.parse(this.requestURL.searchParams.get('url'));
+      this.targetURL = (_targetURL) ? _targetURL : _submittedURL;
+      this.option = Option.getOption(this.requestURL.searchParams.get('option'));
 
-    // 1. If we have no target URL, just return the submit form
-    if (!this.targetURL) return this.getSubmitForm();
+      // 1. If we have no target URL, just return the submit form
+      if (!this.targetURL) return this.getSubmitForm();
 
-    // 2. Check that we are authorized
-    if (!this.authorizedAPIKey) return Auth.errorUnauthorized(this.requestURL.pathname);
+      // 2. Check that we are authorized
+      if (!this.authorizedAPIKey) {
+        return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
+      }
 
-    // 3. Automatically determine option if needed
-    if (this.option === Option.auto) {
-      console.log(`[ProxyService.handleRequest] autodetecting: ${this.targetURL.toString()}`);
-      this.option = await Option.fetchAutoOption(this.targetURL);
-      console.log(`[ProxyService.handleRequest] autodetected: Option.${this.option}`);
+      // 3. Automatically determine option if needed
+      if (this.option === Option.auto) {
+        console.log(`[ProxyService.handleRequest] autodetecting: ${this.targetURL.toString()}`);
+        this.option = await Option.fetchAutoOption(this.targetURL);
+        console.log(`[ProxyService.handleRequest] autodetected: Option.${this.option}`);
+      }
+
+      // 4. See if someone is submitting a form for a new URL
+      if (_submittedURL) return await this.getSubmitResult();
+
+      if (!this.option) {
+        return renderError(502, "The target could not be reached", this.targetURL.pathname);
+      }
+
+      // 5. Go through the options and service them
+      if (this.option === Option.feed) return this.getFeed();
+      if (this.option === Option.asset) return this.getAsset();
+      if (this.option === Option.image) return this.getImage();
+      if (this.option === Option.html) return this.getHTML();
+      
+      return renderError(400, "Invalid proxy option requested", this.requestURL.pathname);
+    } catch (error) {
+      console.error(`[ProxyService.handleRequest] Internal Error: ${error.message}`);
+      return renderError(500, "An internal server error occurred", this.requestURL.pathname);
     }
-
-    // 4. See if someone is submitting a form for a new URL
-    if (_submittedURL) return await this.getSubmitResult();
-
-    if (!this.option) return Auth.errorTargetUnreachable(this.targetURL.pathname);
-
-    // 5. Go through the options and service them
-    if (this.option === Option.feed) return this.getFeed();
-    if (this.option === Option.asset) return this.getAsset();
-    if (this.option === Option.image) return this.getImage();
-    if (this.option === Option.html) return this.getHTML();
-    return null;
   }
 
   getSubmitForm() {
-    const htmlContent = `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>RSS THE PLANET: Proxy</title>
-    </head>
-    <body>
+    const content = `
       <h2>RSS THE PLANET: Proxy</h2>
       <h2>Generate Proxy URL</h2>
       <form action="${Auth.PROXY_VALID_PATH}" method="GET">
         <p>
-          <label for="key">API Key:</label><br>
+          <label for="key">API Key:</label>
           <input type="text" id="key" name="key">
         </p>
         <p>
-          <label for="url">Target URL</label><br>
-          <textarea id="url" name="url" cols="60" rows="10"></textarea>      
+          <label for="url">Target URL</label>
+          <textarea id="url" name="url" cols="60" rows="10" placeholder="https://example.com/feed.xml"></textarea>      
         </p>
         <fieldset>
           <legend>Proxy Mode</legend>
           <input type="radio" id="opt-auto" name="option" value="${Option.auto}" checked>
-          <label for="opt-auto">Autodetect</label><br>
+          <label for="opt-auto" class="inline">Autodetect</label><br>
           <input type="radio" id="opt-feed" name="option" value="${Option.feed}">
-          <label for="opt-feed">News Feed (RSS, Atom)</label><br>
+          <label for="opt-feed" class="inline">News Feed (RSS, Atom)</label><br>
           <input type="radio" id="opt-html" name="option" value="${Option.html}">
-          <label for="opt-feed">Web Page</label><br>
+          <label for="opt-html" class="inline">Web Page</label><br>
           <input type="radio" id="opt-asset" name="option" value="${Option.image}">
-          <label for="opt-asset">Image</label><br>
+          <label for="opt-asset" class="inline">Image</label><br>
           <input type="radio" id="opt-asset" name="option" value="${Option.asset}">
-          <label for="opt-asset">File (audio, video, etc)</label>
+          <label for="opt-asset" class="inline">File (audio, video, etc)</label>
         </fieldset>
         <p>
           <button type="submit">Generate</button>
-          <button type="reset">Reset</button>
+          <button type="reset" class="secondary ml">Reset</button>
         </p>
       </form>
-    </body>
-    </html>
     `;
-    return new Response(htmlContent, {
+    return new Response(renderLayout("RSS THE PLANET: Proxy", content), {
       headers: { "Content-Type": "text/html" },
       status: 200
     });
@@ -191,7 +193,7 @@ export class ProxyService extends Service {
       });
     } catch (error) {
       console.error(`[ProxyService.feed] fetch() ${error.message}`);
-      return Auth.errorTargetUnreachable(this.targetURL.pathname);
+      return renderError(502, "The target could not be reached", this.targetURL.pathname);
     }
   }
 
@@ -232,7 +234,7 @@ export class ProxyService extends Service {
       });
     } catch (error) {
       console.error(`[ProxyService.html] error: ${error.message}`);
-      return Auth.errorTargetUnreachable(this.targetURL.pathname);
+      return renderError(502, "The target could not be reached", this.targetURL.pathname);
     }
   }
 

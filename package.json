@@ -3,11 +3,17 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node ./src/_node-boot.js"
+    "start": "node ./src/_node-boot.js",
+    "test": "vitest run",
+    "test:node": "vitest run --pool=forks"
   },
   "dependencies": {
     "@miniflare/html-rewriter": "^2.14.4",
     "dotenv": "^17.2.3",
     "fast-xml-parser": "^5.3.3"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.12.12",
+    "vitest": "^3.2.4"
   }
 }
