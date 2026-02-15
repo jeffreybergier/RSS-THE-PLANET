@@ -20,6 +20,14 @@ export class OPMLService extends Service {
     this.requestURL = new URL(request.url);
     this.baseURL = new URL(Auth.PROXY_VALID_PATH, this.requestURL.origin);
     this.authorizedAPIKey = ProxyService_getAuthorizedAPIKey(this.requestURL.searchParams.get('key'));
+
+    const pathComponents = this.requestURL.pathname.split('/');
+    const opmlIndex = pathComponents.indexOf("opml");
+    if (opmlIndex !== -1 && pathComponents[opmlIndex + 1]) {
+      this.uuid = pathComponents[opmlIndex + 1];
+      this.action = pathComponents[opmlIndex + 2] || null;
+    }
+
     try {
       this.kvs = new KVSAdapter(env, "OPML", this.authorizedAPIKey);
     } catch {
@@ -33,7 +41,7 @@ export class OPMLService extends Service {
         return await this.handlePost();
       }
       
-      const action = this.requestURL.searchParams.get('action');
+      const action = this.action;
       if (action === 'download') {
         return await this.handleDownload();
       }
@@ -55,7 +63,7 @@ export class OPMLService extends Service {
     if (!this.authorizedAPIKey || !this.kvs) {
       return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
     }
-    const id = this.requestURL.searchParams.get('id');
+    const id = this.uuid;
     if (!id) {
       return renderError(400, "File ID is required", this.requestURL.pathname);
     }
@@ -83,7 +91,7 @@ export class OPMLService extends Service {
     if (!this.authorizedAPIKey) {
       return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
     }
-    const id = this.requestURL.searchParams.get('id');
+    const id = this.uuid;
     if (!id) {
       return renderError(400, "File ID is required", this.requestURL.pathname);
     }
@@ -114,7 +122,7 @@ export class OPMLService extends Service {
     if (!this.authorizedAPIKey) {
       return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
     }
-    const id = this.requestURL.searchParams.get('id');
+    const id = this.uuid;
     if (!id) {
       return renderError(400, "File ID is required", this.requestURL.pathname);
     }
@@ -153,7 +161,7 @@ export class OPMLService extends Service {
           links.forEach(link => {
             const id = link.getAttribute('data-id');
             const action = link.getAttribute('data-action');
-            link.href = baseUrl + '?action=' + action + '&id=' + encodeURIComponent(id) + (key ? '&key=' + encodeURIComponent(key) : '');
+            link.href = baseUrl + encodeURIComponent(id) + '/' + action + (key ? '?key=' + encodeURIComponent(key) : '');
           });
         }
       </script>
@@ -186,15 +194,15 @@ export class OPMLService extends Service {
             <td class="id-col">${f.key}</td>
             <td><strong>${f.name}</strong></td>
             <td class="actions">
-              <a href="${Auth.OPML_VALID_PATH}?action=download&id=${encodeURIComponent(f.key)}&key=${this.authorizedAPIKey}" 
+              <a href="${Auth.OPML_VALID_PATH}${encodeURIComponent(f.key)}/download?key=${this.authorizedAPIKey}" 
                  class="download-link action-link" 
                  data-id="${f.key}"
                  data-action="download">Original</a>
-              <a href="${Auth.OPML_VALID_PATH}?action=convert&id=${encodeURIComponent(f.key)}&key=${this.authorizedAPIKey}" 
+              <a href="${Auth.OPML_VALID_PATH}${encodeURIComponent(f.key)}/convert?key=${this.authorizedAPIKey}" 
                  class="download-link action-link primary" 
                  data-id="${f.key}"
                  data-action="convert">Convert</a>
-              <a href="${Auth.OPML_VALID_PATH}?action=delete&id=${encodeURIComponent(f.key)}&key=${this.authorizedAPIKey}" 
+              <a href="${Auth.OPML_VALID_PATH}${encodeURIComponent(f.key)}/delete?key=${this.authorizedAPIKey}" 
                  class="download-link action-link delete" 
                  data-id="${f.key}"
                  data-action="delete"
@@ -306,6 +314,8 @@ export class OPMLService extends Service {
         <h2>File Saved</h2>
         <p>The file <strong>${filename}</strong> has been saved to the store.</p>
         <p>ID: ${savedEntry.key}</p>
+        <p><a href="${Auth.OPML_VALID_PATH}${encodeURIComponent(savedEntry.key)}/download?key=${authorizedAPIKey}">Download Original</a></p>
+        <p><a href="${Auth.OPML_VALID_PATH}${encodeURIComponent(savedEntry.key)}/convert?key=${authorizedAPIKey}">Download Proxied</a></p>
         <p><a href="${Auth.OPML_VALID_PATH}?key=${authorizedAPIKey}">Back to OPML Rewriter</a></p>
       `;
       return new Response(renderLayout("RSS THE PLANET: Saved", content), {
