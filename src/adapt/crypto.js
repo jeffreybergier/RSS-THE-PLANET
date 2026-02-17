@@ -16,3 +16,53 @@ export async function md5(message) {
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
+
+export class SHA256 {
+
+  static async encrypt(text, owner, env) {
+    const secret = env?.ENCRYPTION_SECRET;
+    return await this.__encrypt(text, secret, owner);
+  }
+
+  static async decrypt(text, owner, env) {
+    const secret = env?.ENCRYPTION_SECRET;
+    return await this.__decrypt(text, secret, owner);
+  }
+
+  static async __encrypt(text, secret, owner) {
+    if (typeof text !== 'string' || typeof secret !== 'string' || typeof owner !== 'string') {
+      throw new Error("[SHA256.encrypt] invalid arguments");
+    }
+    const enc = new TextEncoder();
+    const keyDerivation = await crypto.subtle.digest("SHA-256", enc.encode(secret + owner));
+    const key = await crypto.subtle.importKey("raw", keyDerivation, "AES-GCM", false, ["encrypt"]);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(text));
+    const combined = new Uint8Array(12 + encrypted.byteLength);
+    combined.set(iv); combined.set(new Uint8Array(encrypted), 12);
+    let binary = "";
+    for (let i = 0; i < combined.length; i++) binary += String.fromCharCode(combined[i]);
+    return "v1:" + btoa(binary);
+  }
+
+  static async __decrypt(text, secret, owner) {
+    if (typeof text !== 'string' || typeof secret !== 'string' || typeof owner !== 'string') {
+      throw new Error("[SHA256.decrypt] invalid arguments");
+    }
+    if (!text.startsWith("v1:")) return text;
+    const enc = new TextEncoder();
+    const keyDerivation = await crypto.subtle.digest("SHA-256", enc.encode(secret + owner));
+    const key = await crypto.subtle.importKey("raw", keyDerivation, "AES-GCM", false, ["decrypt"]);
+    try {
+      const binary = atob(text.slice(3));
+      const combined = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) combined[i] = binary.charCodeAt(i);
+      const dec = await crypto.subtle.decrypt({ name: "AES-GCM", iv: combined.slice(0, 12) }, key, combined.slice(12));
+      return new TextDecoder().decode(dec);
+        } catch (e) {
+          console.error(`[SHA256.decrypt] ${e.message}`);
+          return null;
+        }
+      }
+    }
+    
