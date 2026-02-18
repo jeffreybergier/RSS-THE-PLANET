@@ -1,3 +1,4 @@
+import * as Crypto from '../adapt/crypto.js';
 
 function isString(input) { 
   return typeof input === 'string' && input.length > 0;
@@ -40,7 +41,7 @@ export class KVSMeta {
 }
 
 export class KVSAdapter {
-  constructor(env, service, owner) {
+  constructor(env, service, owner, sha256) {
     if (!env || !env.RSS_THE_PLANET_KVS) {
       throw new Error("KVSAdapter Error: env.RSS_THE_PLANET_KVS is missing");
     }
@@ -49,6 +50,9 @@ export class KVSAdapter {
     }
     if (!isString(owner)) {
       throw new Error("KVSAdapter Error: owner must be a non-empty string");
+    }
+    if (sha256 instanceof Crypto.SHA256) {
+      this.sha256 = sha256;
     }
     
     this.store = env.RSS_THE_PLANET_KVS;
@@ -71,9 +75,9 @@ export class KVSAdapter {
   // Returns KVSValue or null
   async __get(key) {
     if (!isString(key)) throw new Error("[KVS.__get] invalid arguments");
+    let entry = null;
     if (this.storeIsMap()) {
-      const entry = this.store.get(key);
-      return isKVSValue(entry) ? entry : null;
+      entry = this.store.get(key);
     } else {
       const { value, metadata } = await this.store.getWithMetadata(key);
       const name = metadata?.["name"];
@@ -83,8 +87,13 @@ export class KVSAdapter {
         console.error(`[KVS.__get] failed validation: ${key}`);
         return null;
       }
-      return new KVSValue(key, name, value, service, owner);
+      entry = new KVSValue(key, name, value, service, owner);
     }
+    
+    if (!isKVSValue(entry)) return null;
+    if (!this.sha256) return entry;
+    entry.value = await this.sha256.decrypt(entry.value, entry.owner);
+    return entry;
   }
   
   // Returns KVSValue or null
@@ -99,11 +108,16 @@ export class KVSAdapter {
     // Returns KVSValue or null
   async __put(value) {
     if (!isKVSValue(value)) throw new Error("[KVS.__put] invalid arguments");
+    if (this.sha256) {
+      value.value = await this.sha256.encrypt(value.value, this.owner);
+    }
     if (this.storeIsMap()) {
       this.store.set(value.key, value);
       return value;
     } else {
-      const metadata = { name: value.name, owner: value.owner, service: value.service };
+      const metadata = { name: value.name, 
+                        owner: value.owner, 
+                      service: value.service };
       await this.store.put(value.key, value.value, { metadata: metadata });
       return value;
     }
