@@ -18,11 +18,11 @@ export async function md5(message) {
 }
 
 export class SHA256 {
-  constructor(request, env, ctx) {
+  constructor(request) {
     if (!(request instanceof Request)) {
       throw new Error("[SHA256.constructor] invalid request");
     }
-    this.secret = env?.ENCRYPTION_SECRET;
+    this.secret = request.env?.ENCRYPTION_SECRET;
     if (typeof this.secret !== 'string') {
       throw new Error("[SHA256.constructor] missing ENCRYPTION_SECRET");
     }
@@ -53,8 +53,7 @@ export class SHA256 {
     const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(text));
     const combined = new Uint8Array(12 + encrypted.byteLength);
     combined.set(iv); combined.set(new Uint8Array(encrypted), 12);
-    let binary = "";
-    for (let i = 0; i < combined.length; i++) binary += String.fromCharCode(combined[i]);
+    const binary = combined.reduce((acc, byte) => acc + String.fromCharCode(byte), "");
     return "v1:" + btoa(binary);
   }
 

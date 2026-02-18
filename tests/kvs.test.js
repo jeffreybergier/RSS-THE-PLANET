@@ -16,10 +16,11 @@ describe('KVSAdapter', () => {
       RSS_THE_PLANET_KVS: new Map(),
       ENCRYPTION_SECRET: 'test-secret'
     };
+    mockRequest.env = mockEnv;
     service = 'test-service';
     owner = 'test-owner';
     otherOwner = 'another-owner';
-    sha256 = new SHA256(mockRequest, mockEnv, {});
+    sha256 = new SHA256(mockRequest);
   });
 
   describe('Constructor', () => {
