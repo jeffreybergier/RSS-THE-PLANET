@@ -29,9 +29,9 @@ describe('encryption', () => {
     const text = "secret message";
     const secret = "my-password";
     const owner = "user-123";
-    const encrypted = await SHA256.__encrypt(text, secret, owner);
+    const encrypted = await SHA256.__encrypt(text, secret + owner);
     expect(encrypted.startsWith("v1:")).toBe(true);
-    const decrypted = await SHA256.__decrypt(encrypted, secret, owner);
+    const decrypted = await SHA256.__decrypt(encrypted, secret + owner);
     expect(decrypted).toBe(text);
   });
 
@@ -39,15 +39,15 @@ describe('encryption', () => {
     const text = "secret message";
     const secret = "correct-secret";
     const owner = "correct-owner";
-    const encrypted = await SHA256.__encrypt(text, secret, owner);
+    const encrypted = await SHA256.__encrypt(text, secret + owner);
     
-    expect(await SHA256.__decrypt(encrypted, "wrong-secret", owner)).toBeNull();
-    expect(await SHA256.__decrypt(encrypted, secret, "wrong-owner")).toBeNull();
+    expect(await SHA256.__decrypt(encrypted, "wrong-secret" + owner)).toBeNull();
+    expect(await SHA256.__decrypt(encrypted, secret + "wrong-owner")).toBeNull();
   });
 
   it('should return original text if not encrypted', async () => {
     const text = "plain text";
-    const result = await SHA256.__decrypt(text, "any-secret", "any-owner");
+    const result = await SHA256.__decrypt(text, "any-secret" + "any-owner");
     expect(result).toBe(text);
   });
 });
@@ -55,12 +55,22 @@ describe('encryption', () => {
 describe('SHA256 Class', () => {
   const env = { ENCRYPTION_SECRET: "top-secret" };
   const owner = "owner-456";
+  const request = new Request("http://example.com");
+
+  it('should throw if secret is missing', () => {
+    expect(() => new SHA256(request, {}, {})).toThrow("[SHA256.constructor] missing ENCRYPTION_SECRET");
+  });
+
+  it('should throw if request is invalid', () => {
+    expect(() => new SHA256({}, env, {})).toThrow("[SHA256.constructor] invalid request");
+  });
 
   it('should encrypt and decrypt using the class methods', async () => {
     const text = "hello world";
-    const encrypted = await SHA256.encrypt(text, owner, env);
+    const crypto = new SHA256(request, env, {});
+    const encrypted = await crypto.encrypt(text, owner);
     expect(encrypted.startsWith("v1:")).toBe(true);
-    const decrypted = await SHA256.decrypt(encrypted, owner, env);
+    const decrypted = await crypto.decrypt(encrypted, owner);
     expect(decrypted).toBe(text);
   });
 });

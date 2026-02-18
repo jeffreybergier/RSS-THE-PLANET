@@ -18,23 +18,36 @@ export async function md5(message) {
 }
 
 export class SHA256 {
-
-  static async encrypt(text, owner, env) {
-    const secret = env?.ENCRYPTION_SECRET;
-    return await this.__encrypt(text, secret, owner);
+  constructor(request, env, ctx) {
+    if (!(request instanceof Request)) {
+      throw new Error("[SHA256.constructor] invalid request");
+    }
+    this.secret = env?.ENCRYPTION_SECRET;
+    if (typeof this.secret !== 'string') {
+      throw new Error("[SHA256.constructor] missing ENCRYPTION_SECRET");
+    }
   }
 
-  static async decrypt(text, owner, env) {
-    const secret = env?.ENCRYPTION_SECRET;
-    return await this.__decrypt(text, secret, owner);
+  async encrypt(text, owner) {
+    if (typeof text !== 'string' || typeof owner !== 'string') {
+      throw new Error("[SHA256.encrypt] invalid arguments");
+    }
+    return await SHA256.__encrypt(text, this.secret + owner);
   }
 
-  static async __encrypt(text, secret, owner) {
-    if (typeof text !== 'string' || typeof secret !== 'string' || typeof owner !== 'string') {
+  async decrypt(text, owner) {
+    if (typeof text !== 'string' || typeof owner !== 'string') {
+      throw new Error("[SHA256.decrypt] invalid arguments");
+    }
+    return await SHA256.__decrypt(text, this.secret + owner);
+  }
+
+  static async __encrypt(text, secret) {
+    if (typeof text !== 'string' || typeof secret !== 'string') {
       throw new Error("[SHA256.encrypt] invalid arguments");
     }
     const enc = new TextEncoder();
-    const keyDerivation = await crypto.subtle.digest("SHA-256", enc.encode(secret + owner));
+    const keyDerivation = await crypto.subtle.digest("SHA-256", enc.encode(secret));
     const key = await crypto.subtle.importKey("raw", keyDerivation, "AES-GCM", false, ["encrypt"]);
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, enc.encode(text));
@@ -45,13 +58,13 @@ export class SHA256 {
     return "v1:" + btoa(binary);
   }
 
-  static async __decrypt(text, secret, owner) {
-    if (typeof text !== 'string' || typeof secret !== 'string' || typeof owner !== 'string') {
+  static async __decrypt(text, secret) {
+    if (typeof text !== 'string' || typeof secret !== 'string') {
       throw new Error("[SHA256.decrypt] invalid arguments");
     }
     if (!text.startsWith("v1:")) return text;
     const enc = new TextEncoder();
-    const keyDerivation = await crypto.subtle.digest("SHA-256", enc.encode(secret + owner));
+    const keyDerivation = await crypto.subtle.digest("SHA-256", enc.encode(secret));
     const key = await crypto.subtle.importKey("raw", keyDerivation, "AES-GCM", false, ["decrypt"]);
     try {
       const binary = atob(text.slice(3));
@@ -59,10 +72,10 @@ export class SHA256 {
       for (let i = 0; i < binary.length; i++) combined[i] = binary.charCodeAt(i);
       const dec = await crypto.subtle.decrypt({ name: "AES-GCM", iv: combined.slice(0, 12) }, key, combined.slice(12));
       return new TextDecoder().decode(dec);
-        } catch (e) {
-          console.error(`[SHA256.decrypt] ${e.message}`);
-          return null;
-        }
-      }
+    } catch (e) {
+      console.error(`[SHA256.decrypt] ${e.message}`);
+      return null;
     }
+  }
+}
     
