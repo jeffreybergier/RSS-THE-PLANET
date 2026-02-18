@@ -21,29 +21,9 @@ export class ProxyService extends Service {
     this.baseURL = new URL(Endpoint.proxy, this.requestURL.origin);
     this.requestHeaders = ProxyService.sanitizedRequestHeaders(request.headers);
     this.requestMethod = request.method;
-    this.isLegacyClient = ProxyService.isLegacyUserAgent(request.headers.get("User-Agent"));
     this.authKey = null;
   }
-
-  static isLegacyUserAgent(userAgent) {
-    if (typeof userAgent !== 'string') return true;
-    console.log(`[ProxyService.isLegacyUserAgent] ${userAgent}`);
-    const legacyAgents = [
-      "NetNewsWire/3",
-      "iTunes/10",
-      "iTunes/9",
-      "iTunes/8",
-      "iTunes/7",
-      "iTunes/6",
-      "iTunes/5",
-      "iTunes/4",
-      "iTunes/3",
-      "iTunes/2",
-      "iTunes/1",
-    ];
-    return legacyAgents.some(s => userAgent.includes(s));
-  }
-
+  
   async handleRequest() {
     try {
       // 0. Auth check
@@ -296,11 +276,11 @@ export class ProxyService extends Service {
       }
     };
 
-    const XML_encodeURL = async (parent, key, option, isLegacyClient = false, where) => {
+    const XML_encodeURL = async (parent, key, option, where) => {
       if (!parent) return;
       if (Array.isArray(parent)) {
         for (const item of parent) {
-          await XML_encodeURL(item, key, option, isLegacyClient, where);
+          await XML_encodeURL(item, key, option, where);
         }
         return;
       }
@@ -342,7 +322,7 @@ export class ProxyService extends Service {
     // While we do know if its a legacy client. For performance reasons, 
     // we just cannot heavily encode every URL. 
     // So only the critical itunes ones get the heavy treatment
-    const maxEntries = (this.isLegacyClient) ? 10 : 30;
+    const maxEntries = 30;
     let xml = parser.parse(originalXML);
     if (xml["?xml-stylesheet"]) delete xml["?xml-stylesheet"]; // Delete any stylesheet
     
@@ -352,16 +332,16 @@ export class ProxyService extends Service {
       // 3.1 Delete itunes:new-feed-url
       delete rssChannel["itunes:new-feed-url"];
       // 3.2 Replace itunes:image
-      await XML_encodeURL(rssChannel["itunes:image"], "@_href", Option.image, this.isLegacyClient);
+      await XML_encodeURL(rssChannel["itunes:image"], "@_href", Option.image);
       // 3.3 Replace Links
-      await XML_encodeURL(rssChannel, "link", Option.auto, this.isLegacyClient);
+      await XML_encodeURL(rssChannel, "link", Option.auto);
       // 3.4 Replace Self Link
-      await XML_encodeURL(rssChannel["atom:link"], "@_href", Option.feed, false, item => {
+      await XML_encodeURL(rssChannel["atom:link"], "@_href", Option.feed, item => {
         return item["@_rel"] === "self";
       });
       // 3.5 Replace the channel image
-      await XML_encodeURL(rssChannel.image, "url", Option.image, false);
-      await XML_encodeURL(rssChannel.image, "link", Option.auto, false);
+      await XML_encodeURL(rssChannel.image, "url", Option.image);
+      await XML_encodeURL(rssChannel.image, "link", Option.auto);
       
       // 4 Patch each item in the channel
       // 4.1 Limit to maxEntries
@@ -374,13 +354,13 @@ export class ProxyService extends Service {
       }
       for (const item of rssChannel.item) {
         // 4.2 Replace the Link property
-        await XML_encodeURL(item, "link", Option.auto, false);
+        await XML_encodeURL(item, "link", Option.auto);
         // 4.3 Replace the itunes image url
-        await XML_encodeURL(item["itunes:image"], "@_href", Option.image, this.isLegacyClient);
+        await XML_encodeURL(item["itunes:image"], "@_href", Option.image);
         // 4.4 Replace enclosure url
-        await XML_encodeURL(item.enclosure, "@_url", Option.asset, this.isLegacyClient);
+        await XML_encodeURL(item.enclosure, "@_url", Option.asset);
         // 4.5 Replace media:content
-        await XML_encodeURL(item["media:content"], "@_url", Option.asset, this.isLegacyClient);
+        await XML_encodeURL(item["media:content"], "@_url", Option.asset);
         // 4.6 Rewrite the HTML in summaries and descriptions
         await XML_rewriteEntryHTML(item);
       }
@@ -408,8 +388,8 @@ export class ProxyService extends Service {
       }
       
       // 5.2 replace logo and icon which are in the spec
-      await XML_encodeURL(rssFeed, "logo", Option.image, false);
-      await XML_encodeURL(rssFeed, "icon", Option.image, false);
+      await XML_encodeURL(rssFeed, "logo", Option.image);
+      await XML_encodeURL(rssFeed, "icon", Option.image);
       
       // 6 Correct all of the entries
       

@@ -6,6 +6,7 @@ import { renderError } from '../ui/error.js';
 import { renderLayout } from '../ui/theme.js';
 import { KVSAdapter, KVSValue } from '../adapt/kvs.js';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
+import * as Crypto from '../adapt/crypto.js';
 
 // MARK: MastoService Class
 
@@ -17,6 +18,7 @@ export class MastoService extends Service {
 
   constructor(request, env, ctx) {
     super(request, env, ctx);
+    this.request = request;
     this.requestURL = new URL(request.url);
     this.baseURL = new URL(Endpoint.proxy, this.requestURL.origin);
     this.authKey = null;
@@ -33,32 +35,41 @@ export class MastoService extends Service {
 
   async handleRequest() {
     try {
-      this.authKey = await Auth.validate(this.request);
-      if (this.authKey) {
-        this.kvs = new KVSAdapter(this.env, "MASTO", this.authKey);
+      const authKey = await Auth.validate(this.request);
+      let kvs = null;
+      
+      if (authKey) {
+        this.request.env = this.env;
+        const sha256 = new Crypto.SHA256(this.request);
+        kvs = new KVSAdapter(this.env, "MASTO", authKey, sha256);
+      } else {
+        if (this.request.method === "POST") {
+           // Pass nulls to handlePost, it will handle the 401
+           return await this.handlePost(null, null); 
+        }
       }
 
       if (this.request.method === "POST") {
-        return await this.handlePost();
+        return await this.handlePost(authKey, kvs);
       }
 
       const type = this.type;
       if (type === 'delete') {
-        return await this.handleDelete();
+        return await this.handleDelete(authKey, kvs);
       }
       if (type === 'status') {
-        return await this.handleStatus();
+        return await this.handleStatus(authKey, kvs);
       }
 
-      return await this.getSubmitForm();
+      return await this.getSubmitForm(authKey, kvs);
     } catch (error) {
       console.error(`[MastoService.handleRequest] error: ${error.message}`);
       return renderError(500, "An internal server error occurred", this.requestURL.pathname);
     }
   }
 
-  async handleDelete() {
-    if (!this.authKey || !this.kvs) {
+  async handleDelete(authKey, kvs) {
+    if (!authKey || !kvs) {
       return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
     }
     const id = this.uuid;
@@ -67,7 +78,7 @@ export class MastoService extends Service {
     }
 
     try {
-      await this.kvs.delete(id);
+      await kvs.delete(id);
     } catch (e) {
       console.error(`[MastoService.handleDelete] error: ${e.message}`);
       return renderError(400, "Could not delete entry", this.requestURL.pathname);
@@ -76,26 +87,31 @@ export class MastoService extends Service {
     return new Response(null, {
       status: 302,
       headers: {
-        "Location": `${Endpoint.masto}?key=${this.authKey}`
+        "Location": `${Endpoint.masto}?key=${authKey}`
       }
     });
   }
 
-  async handleStatus() {
-    if (!this.authKey || !this.kvs) {
+  async handleStatus(authKey, kvs) {
+    if (!authKey || !kvs) {
       return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
     }
     if (!this.uuid || !this.subtype) {
       return renderError(400, "Invalid Request", this.requestURL.pathname);
     }
 
-    const entry = await this.kvs.get(this.uuid);
+    const entry = await kvs.get(this.uuid);
     if (!entry) {
       return renderError(404, "Mastodon credentials not found", this.requestURL.pathname);
     }
 
     const server = entry.name;
     const apiKey = entry.value;
+
+    if (!apiKey) {
+      console.error("[MastoService] Decryption failed or API Key missing");
+      return renderError(500, "Could not decrypt credentials. Please re-save them.", this.requestURL.pathname);
+    }
 
     let apiPath = "";
     if (this.subtype === 'home') {
@@ -153,7 +169,7 @@ export class MastoService extends Service {
       allStatuses = allStatuses.slice(0, 100);
     }
 
-    const rss = this.convertJSONtoRSS(allStatuses, this.subtype);
+    const rss = this.convertJSONtoRSS(allStatuses, this.subtype, authKey);
 
     return new Response(rss, {
       headers: {
@@ -162,7 +178,7 @@ export class MastoService extends Service {
     });
   }
 
-  convertJSONtoRSS(json, subtype) {
+  convertJSONtoRSS(json, subtype, authKey) {
     if (!Array.isArray(json)) return "";
 
     const builder = new XMLBuilder({
@@ -181,7 +197,7 @@ export class MastoService extends Service {
       // 1. Proxy the avatar
       let proxiedAvatar = "";
       try {
-        proxiedAvatar = Codec.encode(new URL(author.avatar), Option.image, this.baseURL, this.authKey).toString();
+        proxiedAvatar = Codec.encode(new URL(author.avatar), Option.image, this.baseURL, authKey).toString();
       } catch (e) {
         proxiedAvatar = author.avatar;
       }
@@ -213,11 +229,11 @@ export class MastoService extends Service {
           try {
             const altText = media.description || '';
             if (media.type === 'image') {
-              const proxiedMedia = Codec.encode(new URL(media.url), Option.image, this.baseURL, this.authKey).toString();
+              const proxiedMedia = Codec.encode(new URL(media.url), Option.image, this.baseURL, authKey).toString();
               html += `<p><img src="${proxiedMedia}" alt="${altText}"></p>`;
             } else {
               // video, gifv, audio, unknown
-              const proxiedLink = Codec.encode(new URL(media.url), Option.auto, this.baseURL, this.authKey).toString();
+              const proxiedLink = Codec.encode(new URL(media.url), Option.auto, this.baseURL, authKey).toString();
               const linkTitle = altText ? `View ${media.type}: ${altText}` : `View ${media.type} attachment`;
               html += `<p><a href="${proxiedLink}">${linkTitle}</a></p>`;
             }
@@ -278,8 +294,8 @@ export class MastoService extends Service {
     return builder.build(rssObj);
   }
 
-  async handlePost() {
-    if (!this.authKey) {
+  async handlePost(authKey, kvs) {
+    if (!authKey || !kvs) {
       return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
     }
 
@@ -299,16 +315,15 @@ export class MastoService extends Service {
     }
 
     try {
-      // name: Mastodon server URL, value: Mastodon API Key
-      const newEntry = new KVSValue(null, server, apiKey, "MASTO", this.authKey);
-      const savedEntry = await this.kvs.put(newEntry);
+      const newEntry = new KVSValue(null, server, apiKey, "MASTO", authKey);
+      const savedEntry = await kvs.put(newEntry);
       
       if (!savedEntry) throw new Error("Failed to save Mastodon credentials");
 
       return new Response(null, {
         status: 302,
         headers: {
-          "Location": `${Endpoint.masto}?key=${this.authKey}`
+          "Location": `${Endpoint.masto}?key=${authKey}`
         }
       });
     } catch (e) {
@@ -317,7 +332,7 @@ export class MastoService extends Service {
     }
   }
 
-  async getSubmitForm() {
+  async getSubmitForm(authKey, kvs) {
     const key = this.requestURL.searchParams.get('key') || '';
     const actionUrl = Endpoint.masto + (key ? `?key=${key}` : '');
 
@@ -333,7 +348,7 @@ export class MastoService extends Service {
 
     let content = '';
 
-    if (!this.authKey) {
+    if (!authKey) {
       content = `
         <h2>RSS THE PLANET: Mastodon</h2>
         <p>Please enter your API Key to access the Mastodon Service.</p>
@@ -348,7 +363,7 @@ export class MastoService extends Service {
         </form>
       `;
     } else {
-      const entries = await this.kvs.list();
+      const entries = await kvs.list();
       let tableRows = '';
       if (entries.length === 0) {
         tableRows = `<tr class="empty-state"><td colspan="3">No Mastodon Servers Saved.</td></tr>`;
@@ -358,16 +373,16 @@ export class MastoService extends Service {
             <td class="id-col">${f.key}</td>
             <td><strong>${f.name}</strong></td>
             <td class="actions">
-              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/status/home?key=${this.authKey}" 
+              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/status/home?key=${authKey}" 
                  class="download-link action-link primary" 
                  target="_blank">Home</a>
-              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/status/local?key=${this.authKey}" 
+              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/status/local?key=${authKey}" 
                  class="download-link action-link" 
                  target="_blank">Local</a>
-              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/status/user?key=${this.authKey}" 
+              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/status/user?key=${authKey}" 
                  class="download-link action-link" 
                  target="_blank">User</a>
-              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/delete?key=${this.authKey}" 
+              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/delete?key=${authKey}" 
                  class="download-link action-link delete" 
                  onclick="return confirm('Are you sure you want to delete ${f.name}?');">Delete</a>
             </td>

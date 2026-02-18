@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import * as Router from '../src/router.js';
+import { KVSAdapter } from '../src/adapt/kvs.js';
+import { SHA256 } from '../src/adapt/crypto.js';
 
 describe('Masto Service Integration', () => {
   const env = {
     VALID_KEYS: '["test-key"]',
+    ENCRYPTION_SECRET: 'a-super-secret-key-for-testing',
     RSS_THE_PLANET_KVS: new Map()
   };
   const ctx = {};
@@ -31,12 +34,16 @@ describe('Masto Service Integration', () => {
     expect(response.status).toBe(302);
     expect(response.headers.get('Location')).toContain('/masto/');
 
-    // Verify it was saved in KVS
-    const entries = Array.from(env.RSS_THE_PLANET_KVS.values());
-    const mastoEntry = entries.find(e => e.service === 'MASTO');
+    // Verify it was saved and can be decrypted
+    request.env = env;
+    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(request));
+    const entries = await kvs.list();
+    const mastoEntry = entries.find(e => e.name === 'https://mastodon.social');
+    const savedValue = await kvs.get(mastoEntry.key);
+
     expect(mastoEntry).toBeDefined();
     expect(mastoEntry.name).toBe('https://mastodon.social');
-    expect(mastoEntry.value).toBe('masto-token-123');
+    expect(savedValue.value).toBe('masto-token-123');
   });
 
   it('should delete Mastodon credentials', async () => {
@@ -50,7 +57,9 @@ describe('Masto Service Integration', () => {
     });
     await Router.route(saveRequest, env, ctx);
 
-    const entries = Array.from(env.RSS_THE_PLANET_KVS.values());
+    saveRequest.env = env;
+    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(saveRequest));
+    const entries = await kvs.list();
     const entry = entries.find(e => e.name === 'https://delete.me');
     const id = entry.key;
 
@@ -60,9 +69,8 @@ describe('Masto Service Integration', () => {
     expect(deleteResponse.status).toBe(302);
 
     // 3. Verify it's gone
-    const postDeleteEntries = Array.from(env.RSS_THE_PLANET_KVS.values());
-    const deletedEntry = postDeleteEntries.find(e => e.key === id);
-    expect(deletedEntry).toBeUndefined();
+    const getResult = await kvs.get(id);
+    expect(getResult).toBeNull();
   });
 
   it('should route status requests to Mastodon API', async () => {
@@ -75,8 +83,10 @@ describe('Masto Service Integration', () => {
       body: formData
     });
     await Router.route(saveRequest, env, ctx);
-
-    const entries = Array.from(env.RSS_THE_PLANET_KVS.values());
+    
+    saveRequest.env = env;
+    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(saveRequest));
+    const entries = await kvs.list();
     const entry = entries.find(e => e.name === 'https://mastodon.test');
     const id = entry.key;
 
@@ -115,8 +125,11 @@ describe('Masto Service Integration', () => {
       expect(xml).toContain('<rss');
       expect(xml).toContain('<channel>');
       expect(xml).toContain('test post');
-      // Verify avatar is present
-      expect(xml).toContain('avatar.png'); 
+      // Verify avatar is present (proxied)
+      // Base64 of encodeURIComponent('https://mastodon.test/avatar.png')
+      expect(xml).toContain('aHR0cHMlM0ElMkYlMkZtYXN0b2Rvbi50ZXN0JTJGYXZhdGFyLnBuZw'); 
+      // check for forced .jpg extension from Codec.sanitizeFileName
+      expect(xml).toContain('avatar.jpg');
     } finally {
       globalThis.fetch = originalFetch;
     }

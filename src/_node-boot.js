@@ -6,6 +6,7 @@ const hostname = process.env.HOST || 'localhost';
 const port = process.env.PORT || 3000;
 const requestEnv = { 
   VALID_KEYS: process.env.VALID_KEYS || "[]",
+  ENCRYPTION_SECRET: process.env.ENCRYPTION_SECRET,
   // TODO: Replace this in-memory Map with a real persistent store (e.g. Redis/fs) for production Node.js usage.
   RSS_THE_PLANET_KVS: new Map()
 };
