@@ -169,7 +169,7 @@ export class MastoService extends Service {
       allStatuses = allStatuses.slice(0, 100);
     }
 
-    const rss = this.convertJSONtoRSS(allStatuses, this.subtype, authKey);
+    const rss = this.convertJSONtoRSS(allStatuses, this.subtype, authKey, server);
 
     return new Response(rss, {
       headers: {
@@ -178,7 +178,7 @@ export class MastoService extends Service {
     });
   }
 
-  convertJSONtoRSS(json, subtype, authKey) {
+  convertJSONtoRSS(json, subtype, authKey, serverUrl) {
     if (!Array.isArray(json)) return "";
 
     const builder = new XMLBuilder({
@@ -272,7 +272,8 @@ export class MastoService extends Service {
       };
     });
 
-    const channelTitle = `Mastodon ${subtype.toUpperCase()} - ${this.requestURL.hostname}`;
+    const instanceName = new URL(serverUrl).hostname;
+    const channelTitle = `${instanceName} - ${subtype.charAt(0).toUpperCase() + subtype.slice(1)}`;
     const rssObj = {
       "?xml": { "@_version": "1.0", "@_encoding": "UTF-8" },
       rss: {
