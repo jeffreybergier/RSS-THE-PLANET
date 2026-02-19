@@ -4,10 +4,11 @@ export const Option = {
   html:  "html",
   asset: "asset",
   image: "image",
+  avatar: "avatar",
   getOption(parameter) {
     if (typeof parameter !== 'string') return this.auto;
     const normalized = parameter.toLowerCase();
-    const validOptions = [this.auto, this.feed, this.html, this.asset, this.image];
+    const validOptions = [this.auto, this.feed, this.html, this.asset, this.image, this.avatar];
     return validOptions.includes(normalized) ? normalized : this.auto;
   },
   async fetchAutoOption(targetURL) {
