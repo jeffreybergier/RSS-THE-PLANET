@@ -176,7 +176,7 @@ export class OPMLService extends Service {
         <p>Please enter your API Key to access the OPML Rewriter.</p>
         <form id="opml-form" action="${actionUrl}" method="GET">
           <p>
-            <label for="key">API Key:</label><br>
+            <label for="key">API Key:</label>
             <div class="input-group">
               <input type="text" id="key" name="key" value="${key}" oninput="updateAction()">
               <button type="button" class="secondary" onclick="window.location.href='${Endpoint.opml}?key=' + encodeURIComponent(document.getElementById('key').value)">Update</button>
@@ -232,7 +232,7 @@ export class OPMLService extends Service {
         <p>Upload an OPML file to rewrite all feed URLs through this proxy.</p>
         <form id="opml-form" action="${actionUrl}" method="POST" enctype="multipart/form-data">
           <p>
-            <label for="key">API Key (if not in URL):</label><br>
+            <label for="key">API Key (if not in URL):</label>
             <div class="input-group">
               <input type="text" id="key" name="key" value="${key}" oninput="updateAction()">
               <button type="button" class="secondary" onclick="window.location.href='${Endpoint.opml}?key=' + encodeURIComponent(document.getElementById('key').value)">Update</button>
@@ -246,7 +246,7 @@ export class OPMLService extends Service {
             <label for="mode-save" style="display:inline;">Save to Store</label>
           </fieldset>
           <p>
-            <label for="opml">OPML File:</label><br>
+            <label for="opml">OPML File:</label>
             <input type="file" id="opml" name="opml" accept=".opml,.xml">
           </p>
           <p>

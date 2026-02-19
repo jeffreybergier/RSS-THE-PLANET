@@ -1,11 +1,13 @@
 import { ProxyService } from './serve/proxy.js';
 import { OPMLService } from './serve/opml.js';
+import { MastoService } from './serve/masto.js';
 import { renderError } from './ui/error.js';
 import { Auth } from './lib/auth.js';
 
 const SERVICES = [
   ProxyService,
-  OPMLService
+  OPMLService,
+  MastoService
 ];
 
 export async function route(request, env, ctx) {
