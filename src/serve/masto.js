@@ -224,8 +224,16 @@ export class MastoService extends Service {
             if (media.type === 'image') {
               const proxiedMedia = Codec.encode(new URL(media.url), Option.image, this.baseURL, authKey).toString();
               html += `<p><img src="${proxiedMedia}" alt="${altText}"></p>`;
+            } else if (media.type === 'video' || media.type === 'gifv') {
+              const proxiedVideo = Codec.encode(new URL(media.url), Option.asset, this.baseURL, authKey).toString();
+              let posterAttr = "";
+              if (media.preview_url) {
+                const proxiedPoster = Codec.encode(new URL(media.preview_url), Option.image, this.baseURL, authKey).toString();
+                posterAttr = `poster="${proxiedPoster}"`;
+              }
+              html += `<p><video controls playsinline loop ${posterAttr} src="${proxiedVideo}"></video></p>`;
             } else {
-              // video, gifv, audio, unknown
+              // audio, unknown
               const proxiedLink = Codec.encode(new URL(media.url), Option.auto, this.baseURL, authKey).toString();
               const linkTitle = altText ? `View ${media.type}: ${altText}` : `View ${media.type} attachment`;
               html += `<p><a href="${proxiedLink}">${linkTitle}</a></p>`;
