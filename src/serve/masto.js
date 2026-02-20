@@ -134,9 +134,9 @@ export class MastoService extends Service {
     let allStatuses = [];
     let maxId = null;
     let attempts = 0;
-    const maxAttempts = 5; // Safety guard
+    const maxAttempts = 2; // Safety guard
 
-    while (allStatuses.length < 100 && attempts < maxAttempts) {
+    while (allStatuses.length < 50 && attempts < maxAttempts) {
       const apiUrl = new URL(apiPath, server);
       if (maxId) {
         apiUrl.searchParams.set('max_id', maxId);
@@ -193,6 +193,9 @@ export class MastoService extends Service {
       const isBoost = !!status.reblog;
       const data = isBoost ? status.reblog : status;
       const author = data.account;
+      const name = author.display_name || author.username;
+      const hostname = new URL(serverUrl).hostname;
+      const handle = author.acct.includes('@') ? author.acct : `${author.acct}@${hostname}`;
       
       // 1. Proxy the avatar
       let proxiedAvatar = "";
@@ -202,21 +205,11 @@ export class MastoService extends Service {
         proxiedAvatar = author.avatar;
       }
 
-      // 2. Build plain HTML content
-      let html = `
-        <div>
-          <div>
-            <img src="${proxiedAvatar}" width="48" height="48" alt="${author.display_name}">
-            <div>
-              <strong>${author.display_name || author.username}</strong><br>
-              <a href="${author.url}">@${author.acct}</a>
-            </div>
-          </div>
-          <br>
-      `;
+      // 2. Build RSS Content
+      let html = `<div>`;
 
       if (isBoost) {
-        html = `<p>🔄 Boosted by ${status.account.display_name || status.account.username}</p>` + html;
+        html += `<p><small>🔁 ${name} (@${handle})</small></p>`;
       }
 
       // Add the actual post content
@@ -246,21 +239,24 @@ export class MastoService extends Service {
       }
 
       html += `
-        <hr>
         <p>
-          Replies: ${data.replies_count || 0} | 
-          Boosts: ${data.reblogs_count || 0} | 
-          Favorites: ${data.favourites_count || 0}
+          ↩️ ${data.replies_count || 0}・🔁 ${data.reblogs_count || 0}・⭐ ${data.favourites_count || 0}
         </p>
+        <hr>
+        <div>
+          <strong>${name}</strong> (@${handle})<br>
+          ${author.note || ''}
+          <p><img src="${proxiedAvatar}" width="48" height="48" alt="${name}" style="border-radius: 4px;"></p>
+        </div>
       </div>`;
 
       // 4. Generate a clean title
       const cleanText = data.content.replace(/<[^>]*>/g, '').trim();
       const titleSnippet = cleanText.length > 60 ? cleanText.substring(0, 60) + "..." : cleanText;
-      const displayTitle = `${author.display_name || author.username}: ${titleSnippet || "Post"}`;
+      const displayTitle = `${name} (@${handle}) ${titleSnippet || "Post"}`;
 
       return {
-        title: isBoost ? `🔄 ${displayTitle}` : displayTitle,
+        title: isBoost ? `🔁 ${displayTitle}` : displayTitle,
         link: data.url,
         guid: {
           "@_isPermaLink": "true",
