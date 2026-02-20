@@ -197,7 +197,7 @@ export class MastoService extends Service {
       // 1. Proxy the avatar
       let proxiedAvatar = "";
       try {
-        proxiedAvatar = Codec.encode(new URL(author.avatar), Option.avatar, this.baseURL, authKey).toString();
+        proxiedAvatar = Codec.encode(new URL(author.avatar), Option.image, this.baseURL, authKey).toString();
       } catch (e) {
         proxiedAvatar = author.avatar;
       }

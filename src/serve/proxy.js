@@ -61,7 +61,6 @@ export class ProxyService extends Service {
       if (this.option === Option.feed) return this.getFeed();
       if (this.option === Option.asset) return this.getAsset();
       if (this.option === Option.image) return this.getImage();
-      if (this.option === Option.avatar) return this.getImage();
       if (this.option === Option.html) return this.getHTML();
       
       return renderError(400, "Invalid proxy option requested", this.requestURL.pathname);
@@ -245,17 +244,9 @@ export class ProxyService extends Service {
     // Image Resizing with Cloudflare
     const wsrvURL = new URL("https://wsrv.nl/");
     wsrvURL.searchParams.set("url", this.targetURL.toString());
-    
-    if (this.option === Option.avatar) {
-      wsrvURL.searchParams.set("w", "48");
-      wsrvURL.searchParams.set("h", "48");
-      wsrvURL.searchParams.set("fit", "cover"); // Ensures square crop
-    } else {
-      wsrvURL.searchParams.set("w", "1024");
-      wsrvURL.searchParams.set("h", "1024");
-      wsrvURL.searchParams.set("fit", "inside");
-    }
-
+    wsrvURL.searchParams.set("w", "1024");
+    wsrvURL.searchParams.set("h", "1024");
+    wsrvURL.searchParams.set("fit", "inside");
     wsrvURL.searchParams.set("we", "1");    // Don't enlarge smaller images
     wsrvURL.searchParams.set("output", "jpg");
     wsrvURL.searchParams.set("q", "75");
