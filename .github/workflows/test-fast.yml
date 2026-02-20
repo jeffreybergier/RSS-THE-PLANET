@@ -7,6 +7,11 @@ on:
       - prod
   workflow_dispatch:
 
+permissions:
+  contents: read
+  checks: write
+  actions: read
+
 jobs:
   test-fast:
     runs-on: ubuntu-latest
@@ -32,9 +37,11 @@ jobs:
           name: fast-test-results
           path: test-results/*.xml
 
-      # Generate Job Summary from test results
-      - name: Test Summary
-        uses: test-summary/action@v2
+      # Generate Detailed Test Report
+      - name: Test Report
+        uses: dorny/test-reporter@v1
         if: always()
         with:
-          paths: "test-results/*.xml"
+          name: Fast Tests Report
+          path: test-results/*.xml
+          reporter: java-junit
