@@ -17,5 +17,24 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - run: npm run test:fast:node
-      - run: npm run test:fast:wrangler
+      
+      # Run Fast Node tests with JUnit output
+      - run: npm run test:fast:node -- --reporter=junit --outputFile=test-results/fast-node.xml
+      
+      # Run Fast Wrangler tests with JUnit output
+      - run: npm run test:fast:wrangler -- --reporter=junit --outputFile=test-results/fast-wrangler.xml
+
+      # Upload Test Results
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fast-test-results
+          path: test-results/*.xml
+
+      # Generate Job Summary from test results
+      - name: Test Summary
+        uses: test-summary/action@v2
+        if: always()
+        with:
+          paths: "test-results/*.xml"
