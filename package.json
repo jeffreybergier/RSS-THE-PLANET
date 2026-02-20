@@ -4,8 +4,16 @@
   "type": "module",
   "scripts": {
     "start": "node ./src/_node-boot.js",
-    "test": "vitest run",
-    "test:node": "vitest run --pool=forks"
+    "test": "npm run test:medium",
+    "test:fast": "npm run test:fast:node",
+    "test:medium": "npm run test:medium:node",
+    "test:slow": "npm run test:slow:node",
+    "test:fast:wrangler": "vitest run --exclude **/proxy-test-end2end-w3c-validation.test.js",
+    "test:medium:wrangler": "npm run test:fast:wrangler && TEST_TARGET=wrangler vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
+    "test:slow:wrangler": "npm run test:fast:wrangler && TEST_TARGET=wrangler E2E_FULL_SUITE=true vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
+    "test:fast:node": "vitest run --pool=forks --exclude **/proxy-test-end2end-w3c-validation.test.js",
+    "test:medium:node": "npm run test:fast:node && TEST_TARGET=node vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
+    "test:slow:node": "npm run test:fast:node && TEST_TARGET=node E2E_FULL_SUITE=true vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks"
   },
   "dependencies": {
     "@miniflare/html-rewriter": "^2.14.4",
