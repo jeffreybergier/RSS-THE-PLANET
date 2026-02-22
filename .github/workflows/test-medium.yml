@@ -2,7 +2,7 @@ name: Medium Tests
 
 on:
   push:
-    branches:
+    branches-ignore:
       - main
       - prod
   workflow_dispatch:
@@ -23,13 +23,11 @@ jobs:
           cache: 'npm'
       - run: npm ci
       
-      # Node Tests (Fast & E2E)
-      - run: npm run test:fast:node -- --reporter=default --reporter=junit --outputFile=test-results/fast-node.xml
-      - run: npm run test:e2e:node -- --reporter=default --reporter=junit --outputFile=test-results/e2e-node.xml
+      # Node Tests (E2E Fast)
+      - run: npm run test:e2e:fast -- --reporter=default --reporter=junit --outputFile=test-results/e2e-node.xml
       
-      # Wrangler Tests (Fast & E2E)
-      - run: npm run test:fast:wrangler -- --reporter=default --reporter=junit --outputFile=test-results/fast-wrangler.xml
-      - run: npm run test:e2e:wrangler -- --reporter=default --reporter=junit --outputFile=test-results/e2e-wrangler.xml
+      # Wrangler Tests (E2E Fast)
+      - run: npm run test:e2e:fast:wrangler -- --reporter=default --reporter=junit --outputFile=test-results/e2e-wrangler.xml
 
       # Upload Test Results
       - name: Upload Test Results

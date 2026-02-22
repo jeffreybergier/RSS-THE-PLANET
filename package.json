@@ -4,21 +4,25 @@
   "type": "module",
   "scripts": {
     "start": "node ./src/_node-boot.js",
+    "start:wrangler": "wrangler dev --ip 0.0.0.0",
+
     "test": "npm run test:medium",
-    "test:fast": "npm run test:fast:node",
-    "test:medium": "npm run test:medium:node",
-    "test:slow": "npm run test:slow:node",
-    "test:node": "npm run test:medium:node",
+    "test:wrangler": "npm run test:medium:wrangler",
+
+    "test:fast": "vitest run --pool=forks --exclude **/proxy-test-end2end-w3c-validation.test.js",
     "test:fast:wrangler": "vitest run --exclude **/proxy-test-end2end-w3c-validation.test.js",
-    "test:medium:wrangler": "npm run test:fast:wrangler && npm run test:e2e:wrangler",
+
+    "test:medium": "npm run test:fast && npm run test:e2e:fast",
+    "test:medium:wrangler": "npm run test:fast:wrangler && npm run test:e2e:fast:wrangler",
+
+    "test:slow": "npm run test:fast && npm run test:e2e:full",
     "test:slow:wrangler": "npm run test:fast:wrangler && npm run test:e2e:full:wrangler",
-    "test:e2e:node": "rm -f tests/.run-full-suite && TEST_TARGET=node vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
-    "test:e2e:full:node": "touch tests/.run-full-suite && TEST_TARGET=node vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
-    "test:e2e:wrangler": "rm -f tests/.run-full-suite && TEST_TARGET=wrangler vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
-    "test:e2e:full:wrangler": "touch tests/.run-full-suite && TEST_TARGET=wrangler vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
-    "test:fast:node": "vitest run --pool=forks --exclude **/proxy-test-end2end-w3c-validation.test.js",
-    "test:medium:node": "npm run test:fast:node && npm run test:e2e:node",
-    "test:slow:node": "npm run test:fast:node && npm run test:e2e:full:node"
+    
+    "test:e2e:fast": "rm -f tests/.run-full-suite && TEST_TARGET=node vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
+    "test:e2e:fast:wrangler": "rm -f tests/.run-full-suite && TEST_TARGET=wrangler vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
+    
+    "test:e2e:full": "touch tests/.run-full-suite && TEST_TARGET=node vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
+    "test:e2e:full:wrangler": "touch tests/.run-full-suite && TEST_TARGET=wrangler vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks"
   },
   "dependencies": {
     "@miniflare/html-rewriter": "^2.14.4",

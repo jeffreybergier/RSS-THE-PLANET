@@ -24,7 +24,7 @@ jobs:
       - run: npm ci
       
       # Run Fast Node tests with JUnit output
-      - run: npm run test:fast:node -- --reporter=default --reporter=junit --outputFile=test-results/fast-node.xml
+      - run: npm run test:fast -- --reporter=default --reporter=junit --outputFile=test-results/fast-node.xml
       
       # Run Fast Wrangler tests with JUnit output
       - run: npm run test:fast:wrangler -- --reporter=default --reporter=junit --outputFile=test-results/fast-wrangler.xml
