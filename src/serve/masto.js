@@ -134,9 +134,9 @@ export class MastoService extends Service {
     let allStatuses = [];
     let maxId = null;
     let attempts = 0;
-    const maxAttempts = 5; // Safety guard
+    const maxAttempts = 2; // Safety guard
 
-    while (allStatuses.length < 100 && attempts < maxAttempts) {
+    while (allStatuses.length < 50 && attempts < maxAttempts) {
       const apiUrl = new URL(apiPath, server);
       if (maxId) {
         apiUrl.searchParams.set('max_id', maxId);
@@ -169,7 +169,7 @@ export class MastoService extends Service {
       allStatuses = allStatuses.slice(0, 100);
     }
 
-    const rss = this.convertJSONtoRSS(allStatuses, this.subtype, authKey);
+    const rss = this.convertJSONtoRSS(allStatuses, this.subtype, authKey, server);
 
     return new Response(rss, {
       headers: {
@@ -178,7 +178,7 @@ export class MastoService extends Service {
     });
   }
 
-  convertJSONtoRSS(json, subtype, authKey) {
+  convertJSONtoRSS(json, subtype, authKey, serverUrl) {
     if (!Array.isArray(json)) return "";
 
     const builder = new XMLBuilder({
@@ -193,6 +193,9 @@ export class MastoService extends Service {
       const isBoost = !!status.reblog;
       const data = isBoost ? status.reblog : status;
       const author = data.account;
+      const name = author.display_name || author.username;
+      const hostname = new URL(serverUrl).hostname;
+      const handle = author.acct.includes('@') ? author.acct : `${author.acct}@${hostname}`;
       
       // 1. Proxy the avatar
       let proxiedAvatar = "";
@@ -202,21 +205,11 @@ export class MastoService extends Service {
         proxiedAvatar = author.avatar;
       }
 
-      // 2. Build plain HTML content
-      let html = `
-        <div>
-          <div>
-            <img src="${proxiedAvatar}" width="48" height="48" alt="${author.display_name}">
-            <div>
-              <strong>${author.display_name || author.username}</strong><br>
-              <a href="${author.url}">@${author.acct}</a>
-            </div>
-          </div>
-          <br>
-      `;
+      // 2. Build RSS Content
+      let html = `<div>`;
 
       if (isBoost) {
-        html = `<p>🔄 Boosted by ${status.account.display_name || status.account.username}</p>` + html;
+        html += `<p><small>🔁 ${name} (@${handle})</small></p>`;
       }
 
       // Add the actual post content
@@ -231,8 +224,16 @@ export class MastoService extends Service {
             if (media.type === 'image') {
               const proxiedMedia = Codec.encode(new URL(media.url), Option.image, this.baseURL, authKey).toString();
               html += `<p><img src="${proxiedMedia}" alt="${altText}"></p>`;
+            } else if (media.type === 'video' || media.type === 'gifv') {
+              const proxiedVideo = Codec.encode(new URL(media.url), Option.asset, this.baseURL, authKey).toString();
+              let posterAttr = "";
+              if (media.preview_url) {
+                const proxiedPoster = Codec.encode(new URL(media.preview_url), Option.image, this.baseURL, authKey).toString();
+                posterAttr = `poster="${proxiedPoster}"`;
+              }
+              html += `<p><video controls playsinline loop ${posterAttr} src="${proxiedVideo}"></video></p>`;
             } else {
-              // video, gifv, audio, unknown
+              // audio, unknown
               const proxiedLink = Codec.encode(new URL(media.url), Option.auto, this.baseURL, authKey).toString();
               const linkTitle = altText ? `View ${media.type}: ${altText}` : `View ${media.type} attachment`;
               html += `<p><a href="${proxiedLink}">${linkTitle}</a></p>`;
@@ -246,21 +247,24 @@ export class MastoService extends Service {
       }
 
       html += `
-        <hr>
         <p>
-          Replies: ${data.replies_count || 0} | 
-          Boosts: ${data.reblogs_count || 0} | 
-          Favorites: ${data.favourites_count || 0}
+          ↩️ ${data.replies_count || 0}・🔁 ${data.reblogs_count || 0}・⭐ ${data.favourites_count || 0}
         </p>
+        <hr>
+        <div>
+          <strong>${name}</strong> (@${handle})<br>
+          ${author.note || ''}
+          <p><img src="${proxiedAvatar}" width="48" height="48" alt="${name}" style="border-radius: 4px;"></p>
+        </div>
       </div>`;
 
       // 4. Generate a clean title
       const cleanText = data.content.replace(/<[^>]*>/g, '').trim();
       const titleSnippet = cleanText.length > 60 ? cleanText.substring(0, 60) + "..." : cleanText;
-      const displayTitle = `${author.display_name || author.username}: ${titleSnippet || "Post"}`;
+      const displayTitle = `${name} (@${handle}) ${titleSnippet || "Post"}`;
 
       return {
-        title: isBoost ? `🔄 ${displayTitle}` : displayTitle,
+        title: isBoost ? `🔁 ${displayTitle}` : displayTitle,
         link: data.url,
         guid: {
           "@_isPermaLink": "true",
@@ -272,7 +276,8 @@ export class MastoService extends Service {
       };
     });
 
-    const channelTitle = `Mastodon ${subtype.toUpperCase()} - ${this.requestURL.hostname}`;
+    const instanceName = new URL(serverUrl).hostname;
+    const channelTitle = `${instanceName} - ${subtype.charAt(0).toUpperCase() + subtype.slice(1)}`;
     const rssObj = {
       "?xml": { "@_version": "1.0", "@_encoding": "UTF-8" },
       rss: {
