@@ -1,88 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0">
   <head>
-    <title>Original Test Feeds</title>
+    <title>Fast Test Feeds</title>
   </head>
   <body>
     <outline text="Feeds" title="Feeds">
       <outline type="rss" text="The Verge" xmlUrl="https://www.theverge.com/rss/index.xml" />
       <outline type="rss" text="MacRumors" xmlUrl="https://www.macrumors.com/macrumors.xml" />
       <outline type="rss" text="Daring Fireball" xmlUrl="https://daringfireball.net/feeds/main" />
-      <outline type="rss" text="It's Nice That" xmlUrl="https://feeds2.feedburner.com/itsnicethat/SlXC" />
-      <outline type="rss" text="Nomadic Matt" xmlUrl="https://www.nomadicmatt.com/feed/" />
-      <outline type="rss" text="Xkcd" xmlUrl="https://xkcd.com/rss.xml" />
-      <outline type="rss" text="What If?" xmlUrl="https://what-if.xkcd.com/feed.atom" />
-      <outline type="rss" text="Vienna Support" xmlUrl="https://github.com/ViennaRSS/vienna-rss/discussions.atom" />
-      <outline type="rss" text="A Working Library" xmlUrl="https://aworkinglibrary.com/feed/index.xml" />
-      <outline type="rss" text="Vienna Developer Blog" xmlUrl="https://www.vienna-rss.com/feed.xml" />
-      <outline type="rss" text="Cool Hunting" xmlUrl="http://feeds.coolhunting.com/ch" />
-      <outline type="rss" text="BBC World News" xmlUrl="https://feeds.bbci.co.uk/news/world/rss.xml" />
-      <outline type="rss" text="Ars Technica" xmlUrl="https://feeds.arstechnica.com/arstechnica/index/" />
-      <outline type="rss" text="Colossal" xmlUrl="https://www.thisiscolossal.com/feed/" />
-      <outline type="rss" text="Craig Hockenberry" xmlUrl="https://furbo.org/feed" />
-      <outline type="rss" text="inessential" xmlUrl="https://inessential.com/xml/rss.xml" />
-      <outline type="rss" text="Jason Kottke" xmlUrl="http://feeds.kottke.org/main" />
-      <outline type="rss" text="Julia Evans" xmlUrl="https://jvns.ca/atom.xml" />
-      <outline type="rss" text="Manton Reece" xmlUrl="https://www.manton.org/feed.xml" />
-      <outline type="rss" text="Maurice Parker" xmlUrl="https://vincode.io/feed.xml" />
-      <outline type="rss" text="Michael Tsai" xmlUrl="https://mjtsai.com/blog/feed/" />
-      <outline type="rss" text="NetNewsWire Blog" xmlUrl="https://netnewswire.blog/feed.xml" />
-      <outline type="rss" text="One Foot Tsunami" xmlUrl="https://onefoottsunami.com/feed/atom/" />
-      <outline type="rss" text="Scripting News" xmlUrl="http://scripting.com/rss.xml" />
-      <outline type="rss" text="Six Colors" xmlUrl="https://feedpress.me/sixcolors?type=xml" />
-      <outline type="rss" text="RTINGS.com" xmlUrl="https://www.rtings.com/latest-rss" />
-      <outline type="rss" text="Mac OTAKARA" xmlUrl="https://www.macotakara.jp/rss2.xml" />
-      <outline type="rss" text="Masto: Jeff Johnson" xmlUrl="https://mastodon.social/@lapcatsoftware.rss" />
-      <outline type="rss" text="Masto: Curt Clifton" xmlUrl="https://indieweb.social/@curtclifton.rss" />
-      <outline type="rss" text="Masto: MEEE" xmlUrl="https://jeffburg.social/@jeff.rss" />
-    </outline>
-
-    <outline text="Feeds (Troublesome)" title="Feeds (Troublesome)">
-      <outline type="rss" text="Amusing Planet" xmlUrl="https://www.amusingplanet.com/feeds/posts/default?alt=rss" />
-      <outline type="rss" text="Apple News" xmlUrl="https://www.apple.com/newsroom/rss-feed.rss" />
-      <outline type="rss" text="Allen Pike" xmlUrl="https://feeds.allenpike.com/feed/" />
-    </outline>
-
-    <outline text="Podcasts" title="Podcasts">
-      <outline type="rss" text="Accidental Tech Podcast" xmlUrl="https://atp.fm/rss" />
-      <outline type="rss" text="ArchaeoEd Podcast" xmlUrl="https://feeds.buzzsprout.com/1314529.rss" />
-      <outline type="rss" text="Arms Control Wonk" xmlUrl="https://armscontrolwonk.libsyn.com/rss" />
-      <outline type="rss" text="Autoline Daily" xmlUrl="https://www.spreaker.com/show/3270299/episodes/feed" />
-      <outline type="rss" text="Bay Curious" xmlUrl="https://feeds.megaphone.fm/KQINC4698044094" />
-      <outline type="rss" text="Criminal" xmlUrl="https://feeds.megaphone.fm/VMP7924981569" />
-      <outline type="rss" text="Diggnation" xmlUrl="https://feeds.transistor.fm/diggnation" />
-      <outline type="rss" text="Disrupting Japan" xmlUrl="https://www.disruptingjapan.com/feed/podcast/" />
-      <outline type="rss" text="Land of the Giants" xmlUrl="https://feeds.megaphone.fm/landofthegiants" />
-      <outline type="rss" text="Lex Fridman Podcast" xmlUrl="https://lexfridman.com/feed/podcast/" />
-      <outline type="rss" text="Mobile Dev Japan" xmlUrl="https://anchor.fm/s/108113308/podcast/rss" />
-      <outline type="rss" text="More Perfect" xmlUrl="https://feeds.simplecast.com/lQwwDIs1" />
-      <outline type="rss" text="On with Kara Swisher" xmlUrl="https://feeds.megaphone.fm/VMP1684715893" />
-      <outline type="rss" text="Science Vs" xmlUrl="https://feeds.megaphone.fm/sciencevs" />
-      <outline type="rss" text="Shell Game" xmlUrl="https://www.omnycontent.com/d/playlist/e73c998e-6e60-432f-8610-ae210140c5b1/d3d3abca-191a-4010-8160-b3530112d393/c639b22c-ee8c-43dd-86c1-b3530112d3a3/podcast.rss" />
-      <outline type="rss" text="The Rest Is History" xmlUrl="https://feeds.megaphone.fm/GLT4787413333" />
-      <outline type="rss" text="The Rest Is Politics: US" xmlUrl="https://feeds.megaphone.fm/GLT5336643697" />
-      <outline type="rss" text="The Talk Show" xmlUrl="https://daringfireball.net/thetalkshow/rss" />
-      <outline type="rss" text="This Podcast Will Kill You" xmlUrl="https://www.omnycontent.com/d/playlist/e73c998e-6e60-432f-8610-ae210140c5b1/e0709a39-232b-4483-8e4f-b24c0111ae2c/64b4c224-562e-4b2f-9f31-b24c0111ae53/podcast.rss" />
-      <outline type="rss" text="Unexplainable" xmlUrl="https://feeds.megaphone.fm/VMP9331026707" />
-      <outline type="rss" text="Upgrade" xmlUrl="https://www.relay.fm/upgrade/feed" />
-      <outline type="rss" text="What Trump Can Teach Us About Con Law" xmlUrl="https://feeds.simplecast.com/jZLi00b4" />
-      <outline type="rss" text="日本語 with あこ" xmlUrl="https://anchor.fm/s/2e08a010/podcast/rss" />
-    </outline>
-
-    <outline text="Podcasts (Troublesome)" title="Podcasts (Troublesome)">
-      <outline type="rss" text="Acquired" xmlUrl="https://feeds.transistor.fm/acquired" />
-      <outline type="rss" text="All-In" xmlUrl="https://rss.libsyn.com/shows/254861/destinations/1928300.xml" />
-      <outline type="rss" text="Apple News Today" xmlUrl="https://apple.news/podcast/apple_news_today" />
-      <outline type="rss" text="99% Invisible" xmlUrl="https://feeds.simplecast.com/BqbsxVfO" />
-      <outline type="rss" text="Decoder" xmlUrl="https://feeds.megaphone.fm/recodedecode" />
-      <outline type="rss" text="Grammar Girl" xmlUrl="https://feeds.simplecast.com/XcH2p3Ah" />
-      <outline type="rss" text="My Favorite Murder" xmlUrl="https://www.omnycontent.com/d/playlist/e73c998e-6e60-432f-8610-ae210140c5b1/bdde8bb3-169d-43b1-91d3-b24c0047969c/f450d41f-16bc-4ecd-8f6c-b24c004796e2/podcast.rss" />
-      <outline type="rss" text="Nihongo con Teppei" xmlUrl="http://nihongoconteppei.com/feed/podcast" />
-      <outline type="rss" text="Open to Debate" xmlUrl="https://feeds.megaphone.fm/PNP1207584390" />
-      <outline type="rss" text="Radiolab" xmlUrl="https://feeds.simplecast.com/EmVW7VGp" />
-      <outline type="rss" text="The Vergecast" xmlUrl="https://feeds.megaphone.fm/vergecast" />
-      <outline type="rss" text="Today, Explained" xmlUrl="https://feeds.megaphone.fm/VMP5705694065" />
-      <outline type="rss" text="YUYUの日本語Podcast" xmlUrl="https://anchor.fm/s/cda85d4/podcast/rss" />
     </outline>
   </body>
 </opml>

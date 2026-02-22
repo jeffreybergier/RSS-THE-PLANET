@@ -1,0 +1,46 @@
+name: Slow Tests
+
+on:
+  pull_request:
+    branches:
+      - prod
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+  actions: read
+
+jobs:
+  test-slow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      
+      # Node Tests
+      - run: npm run test:e2e:full -- --reporter=default --reporter=junit --outputFile=test-results/e2e-node.xml
+
+      # Wrangler Tests
+      - run: npm run test:e2e:full:wrangler -- --reporter=default --reporter=junit --outputFile=test-results/e2e-wrangler.xml
+
+      # Upload Test Results
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: slow-test-results
+          path: test-results/*.xml
+
+      # Generate Detailed Test Report
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Slow Tests Report
+          path: test-results/*.xml
+          reporter: java-junit

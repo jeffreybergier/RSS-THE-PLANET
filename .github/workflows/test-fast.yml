@@ -1,0 +1,47 @@
+name: Fast Tests
+
+on:
+  push:
+    branches-ignore:
+      - main
+      - prod
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+  actions: read
+
+jobs:
+  test-fast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      
+      # Run Fast Node tests with JUnit output
+      - run: npm run test:fast -- --reporter=default --reporter=junit --outputFile=test-results/fast-node.xml
+      
+      # Run Fast Wrangler tests with JUnit output
+      - run: npm run test:fast:wrangler -- --reporter=default --reporter=junit --outputFile=test-results/fast-wrangler.xml
+
+      # Upload Test Results
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fast-test-results
+          path: test-results/*.xml
+
+      # Generate Detailed Test Report
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Fast Tests Report
+          path: test-results/*.xml
+          reporter: java-junit
