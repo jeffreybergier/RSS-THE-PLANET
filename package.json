@@ -8,14 +8,17 @@
     "test:fast": "npm run test:fast:node",
     "test:medium": "npm run test:medium:node",
     "test:slow": "npm run test:slow:node",
+    "test:node": "npm run test:medium:node",
     "test:fast:wrangler": "vitest run --exclude **/proxy-test-end2end-w3c-validation.test.js",
-    "test:medium:wrangler": "npm run test:fast:wrangler && TEST_TARGET=wrangler vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
-    "test:slow:wrangler": "npm run test:fast:wrangler && TEST_TARGET=wrangler E2E_FULL_SUITE=true vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
-    "test:e2e:node": "TEST_TARGET=node vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
-    "test:e2e:wrangler": "TEST_TARGET=wrangler vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
+    "test:medium:wrangler": "npm run test:fast:wrangler && npm run test:e2e:wrangler",
+    "test:slow:wrangler": "npm run test:fast:wrangler && npm run test:e2e:full:wrangler",
+    "test:e2e:node": "rm -f tests/.run-full-suite && TEST_TARGET=node vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
+    "test:e2e:full:node": "touch tests/.run-full-suite && TEST_TARGET=node vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
+    "test:e2e:wrangler": "rm -f tests/.run-full-suite && TEST_TARGET=wrangler vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
+    "test:e2e:full:wrangler": "touch tests/.run-full-suite && TEST_TARGET=wrangler vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
     "test:fast:node": "vitest run --pool=forks --exclude **/proxy-test-end2end-w3c-validation.test.js",
     "test:medium:node": "npm run test:fast:node && npm run test:e2e:node",
-    "test:slow:node": "npm run test:fast:node && E2E_FULL_SUITE=true npm run test:e2e:node"
+    "test:slow:node": "npm run test:fast:node && npm run test:e2e:full:node"
   },
   "dependencies": {
     "@miniflare/html-rewriter": "^2.14.4",

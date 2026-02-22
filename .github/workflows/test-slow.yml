@@ -23,14 +23,14 @@ jobs:
       - run: npm ci
       
       # Node Tests
-      - run: npm run test:fast:node -- --reporter=junit --outputFile=test-results/fast-node.xml
+      - run: npm run test:fast:node -- --reporter=default --reporter=junit --outputFile=test-results/fast-node.xml
       - name: E2E Node (Slow)
-        run: E2E_FULL_SUITE=true npm run test:e2e:node -- --reporter=junit --outputFile=test-results/e2e-node.xml
+        run: npm run test:e2e:full:node -- --reporter=default --reporter=junit --outputFile=test-results/e2e-node.xml
 
       # Wrangler Tests
-      - run: npm run test:fast:wrangler -- --reporter=junit --outputFile=test-results/fast-wrangler.xml
+      - run: npm run test:fast:wrangler -- --reporter=default --reporter=junit --outputFile=test-results/fast-wrangler.xml
       - name: E2E Wrangler (Slow)
-        run: E2E_FULL_SUITE=true npm run test:e2e:wrangler -- --reporter=junit --outputFile=test-results/e2e-wrangler.xml
+        run: npm run test:e2e:full:wrangler -- --reporter=default --reporter=junit --outputFile=test-results/e2e-wrangler.xml
 
       # Upload Test Results
       - name: Upload Test Results

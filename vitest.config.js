@@ -7,5 +7,8 @@ export default defineWorkersConfig({
         wrangler: { configPath: './wrangler.toml' },
       },
     },
+    define: {
+      'GLOBAL_E2E_FULL_SUITE': process.env.E2E_FULL_SUITE === 'true' ? 'true' : 'false',
+    },
   },
 });
