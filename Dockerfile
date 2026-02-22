@@ -6,11 +6,11 @@
 
 # Run App - Node.js
 # docker run -it --rm -p 3000:3000 -v "$(pwd):/app" -v /app/node_modules app npm start
-# docker run -it --rm -v "$(pwd):/app" -v /app/node_modules app npm run test:medium:node
+# docker run -it --rm -v "$(pwd):/app" -v /app/node_modules app npm run test
 
 # Run App - Wrangler
 # docker run -it --rm -p 3000:8787 -v "$(pwd):/app" -v /app/node_modules app wrangler dev --ip 0.0.0.0
-# docker run -it --rm -v "$(pwd):/app" -v /app/node_modules app npm run test:medium:wrangler
+# docker run -it --rm -v "$(pwd):/app" -v /app/node_modules app npm run test:wrangler
 
 # Run Gemini
 # docker run -it --rm -v "$(pwd):/app" -v /app/node_modules -v ~/.gemini:/root/.gemini gemini gemini
