@@ -18,7 +18,8 @@
     "test:e2e:full:wrangler": "touch tests/.run-full-suite && TEST_TARGET=wrangler vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
     "test:fast:node": "vitest run --pool=forks --exclude **/proxy-test-end2end-w3c-validation.test.js",
     "test:medium:node": "npm run test:fast:node && npm run test:e2e:node",
-    "test:slow:node": "npm run test:fast:node && npm run test:e2e:full:node"
+    "test:slow:node": "npm run test:fast:node && npm run test:e2e:full:node",
+    "dev:wrangler": "wrangler dev --ip 0.0.0.0"
   },
   "dependencies": {
     "@miniflare/html-rewriter": "^2.14.4",
