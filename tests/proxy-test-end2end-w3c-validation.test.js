@@ -131,7 +131,7 @@ function analyzeIssues(xmlResponse) {
   }
 }
 
-describe('E2E Feed Proxy Validation', () => {
+describe.sequential('E2E Feed Proxy Validation', () => {
   let serverProcess;
 
   beforeAll(async () => {
@@ -166,6 +166,7 @@ describe('E2E Feed Proxy Validation', () => {
 
   describe.each(SELECTED_FEEDS)('Feed: $name', (feed) => {
     it(`should match original validation: ${feed.url}`, { timeout: 120000 }, async () => {
+      await wait(1000); // these tests need to run very slowly so that W3C does not block us
       console.error(`[E2E] STARTING: ${feed.name} (${feed.url})`);
       const genUrl = `${TEST_PROXY_URL}/proxy/?key=${API_KEY}&url=${encodeURIComponent(feed.url)}`;
       const genRes = await fetch(genUrl);

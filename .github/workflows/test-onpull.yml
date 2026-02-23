@@ -1,0 +1,61 @@
+name: Slow Tests On Pull
+
+on:
+  pull_request:
+    branches:
+      - main
+      - prod
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  checks: write
+  actions: read
+
+jobs:
+  test-onpull:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+
+      # 1. Ensure the directory exists
+      - name: Create Test Results Directory
+        run: mkdir -p test-results
+
+      # 2. Run Node Tests
+      # Only do Fast and Medium tests in node so we don't kill the W3C server
+      # Wrangler will do the Full Slow Test
+      - name: Node Fast and Medium
+        continue-on-error: true
+        run: |
+          npm run test:fast -- --reporter=default --reporter=junit --outputFile=test-results/node-fast.xml
+          npm run test:e2e:fast -- --reporter=default --reporter=junit --outputFile=test-results/node-e2e-fast.xml
+     
+      # 3. Run Wrangler Tests
+      - name: Wrangler Fast and Slow
+        continue-on-error: true
+        run: |
+          npm run test:fast:wrangler -- --reporter=default --reporter=junit --outputFile=test-results/wrangler-fast.xml
+          npm run test:e2e:full:wrangler -- --reporter=default --reporter=junit --outputFile=test-results/wrangler-e2e-full.xml
+      
+      # Upload Test Results
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: slow-test-results
+          path: test-results/*.xml
+
+      # Generate Detailed Test Report
+      - name: Test Report
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Slow Tests On Pull
+          path: test-results/*.xml
+          reporter: java-junit
