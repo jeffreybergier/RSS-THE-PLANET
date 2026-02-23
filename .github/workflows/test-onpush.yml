@@ -1,10 +1,7 @@
-name: Fast Tests
+name: Medium Tests On Push
 
 on:
   push:
-    branches-ignore:
-      - main
-      - prod
   workflow_dispatch:
 
 permissions:
@@ -13,7 +10,7 @@ permissions:
   actions: read
 
 jobs:
-  test-fast:
+  test-oncommit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,18 +20,16 @@ jobs:
           cache: 'npm'
       - run: npm ci
       
-      # Run Fast Node tests with JUnit output
-      - run: npm run test:fast -- --reporter=default --reporter=junit --outputFile=test-results/fast-node.xml
-      
-      # Run Fast Wrangler tests with JUnit output
-      - run: npm run test:fast:wrangler -- --reporter=default --reporter=junit --outputFile=test-results/fast-wrangler.xml
+      # Test Medium Includes Fast Tests
+      - run: npm run test:medium -- --reporter=default --reporter=junit --outputFile=test-results/medium-node.xml
+      - run: npm run test:medium:wrangler -- --reporter=default --reporter=junit --outputFile=test-results/medium-wrangler.xml
 
       # Upload Test Results
       - name: Upload Test Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: fast-test-results
+          name: medium-test-results
           path: test-results/*.xml
 
       # Generate Detailed Test Report
@@ -42,6 +37,6 @@ jobs:
         uses: dorny/test-reporter@v1
         if: always()
         with:
-          name: Fast Tests Report
+          name: Medium Tests On Push
           path: test-results/*.xml
           reporter: java-junit

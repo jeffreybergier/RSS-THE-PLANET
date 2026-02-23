@@ -1,9 +1,10 @@
-name: Slow Tests
+name: Slow Tests On Pull
 
 on:
   pull_request:
     branches:
-      - prod
+        - main
+        - prod
   workflow_dispatch:
 
 permissions:
@@ -22,11 +23,9 @@ jobs:
           cache: 'npm'
       - run: npm ci
       
-      # Node Tests
-      - run: npm run test:e2e:full -- --reporter=default --reporter=junit --outputFile=test-results/e2e-node.xml
-
-      # Wrangler Tests
-      - run: npm run test:e2e:full:wrangler -- --reporter=default --reporter=junit --outputFile=test-results/e2e-wrangler.xml
+      # Test Slow includes all tests
+      - run: npm run test:slow -- --reporter=default --reporter=junit --outputFile=test-results/slow-node.xml
+      - run: npm run test:slow:wrangler -- --reporter=default --reporter=junit --outputFile=test-results/slow-wrangler.xml
 
       # Upload Test Results
       - name: Upload Test Results
@@ -41,6 +40,6 @@ jobs:
         uses: dorny/test-reporter@v1
         if: always()
         with:
-          name: Slow Tests Report
+          name: Slow Tests On Pull
           path: test-results/*.xml
           reporter: java-junit
