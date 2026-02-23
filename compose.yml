@@ -1,0 +1,85 @@
+## Handy Shortcuts
+# This file is purely optional and just allows easy shortcuts
+# for running all the function exposed in Docker.
+# To see original commands or to use without compose,
+# see Containerfile
+
+# docker compose up start
+# docker compose up start-wrangler
+# docker compose run --rm test
+# docker compose run --rm test-wrangler
+# docker compose run --rm gemini
+
+## 
+
+services:
+  # 1. Run App - Node.js
+  start:
+    build:
+      context: .
+      dockerfile: Containerfile
+      target: app
+    image: rssplanet-app
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm start
+    tty: true
+
+  # 2. Run Test - Node.js
+  test:
+    build:
+      context: .
+      dockerfile: Containerfile
+      target: app
+    image: rssplanet-app
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run test
+    tty: true
+
+  # 3. Run App - Wrangler
+  start-wrangler:
+    build:
+      context: .
+      dockerfile: Containerfile
+      target: app
+    image: rssplanet-app
+    ports:
+      - "3000:8787"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: wrangler dev --ip 0.0.0.0
+    tty: true
+
+  # 4. Run Test - Wrangler
+  test-wrangler:
+    build:
+      context: .
+      dockerfile: Containerfile
+      target: app
+    image: rssplanet-app
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npm run test:wrangler
+    tty: true
+
+  # 5. Run Gemini
+  gemini:
+    build:
+      context: .
+      dockerfile: Containerfile
+      target: gemini
+    image: rssplanet-gemini
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - ~/.gemini:/root/.gemini
+    command: gemini
+    stdin_open: true
+    tty: true

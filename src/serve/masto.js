@@ -191,6 +191,7 @@ export class MastoService extends Service {
 
     const items = json.map(status => {
       const isBoost = !!status.reblog;
+      const isReply = !!status.in_reply_to_id;
       const data = isBoost ? status.reblog : status;
       const author = data.account;
       const name = author.display_name || author.username;
@@ -209,7 +210,14 @@ export class MastoService extends Service {
       let html = `<div>`;
 
       if (isBoost) {
-        html += `<p><small>🔁 ${name} (@${handle})</small></p>`;
+        const booster = status.account;
+        const boosterName = booster.display_name || booster.username;
+        const boosterHandle = booster.acct.includes('@') ? booster.acct : `${booster.acct}@${hostname}`;
+        html += `<p><small>🔁 Boosted by ${boosterName} &lt;${boosterHandle}&gt;</small></p>`;
+      } else if (isReply) {
+        const replyToAccount = data.mentions?.find(m => m.id === status.in_reply_to_account_id);
+        const replyHandle = replyToAccount ? replyToAccount.acct : "Post";
+        html += `<p><small>↩️ Reply to @${replyHandle}</small></p>`;
       }
 
       // Add the actual post content
@@ -224,8 +232,16 @@ export class MastoService extends Service {
             if (media.type === 'image') {
               const proxiedMedia = Codec.encode(new URL(media.url), Option.image, this.baseURL, authKey).toString();
               html += `<p><img src="${proxiedMedia}" alt="${altText}"></p>`;
+            } else if (media.type === 'video' || media.type === 'gifv') {
+              const proxiedVideo = Codec.encode(new URL(media.url), Option.asset, this.baseURL, authKey).toString();
+              let posterAttr = "";
+              if (media.preview_url) {
+                const proxiedPoster = Codec.encode(new URL(media.preview_url), Option.image, this.baseURL, authKey).toString();
+                posterAttr = `poster="${proxiedPoster}"`;
+              }
+              html += `<p><video controls playsinline loop ${posterAttr} src="${proxiedVideo}"></video></p>`;
             } else {
-              // video, gifv, audio, unknown
+              // audio, unknown
               const proxiedLink = Codec.encode(new URL(media.url), Option.auto, this.baseURL, authKey).toString();
               const linkTitle = altText ? `View ${media.type}: ${altText}` : `View ${media.type} attachment`;
               html += `<p><a href="${proxiedLink}">${linkTitle}</a></p>`;
@@ -244,19 +260,27 @@ export class MastoService extends Service {
         </p>
         <hr>
         <div>
-          <strong>${name}</strong> (@${handle})<br>
-          ${author.note || ''}
-          <p><img src="${proxiedAvatar}" width="48" height="48" alt="${name}" style="border-radius: 4px;"></p>
+          <strong>${name}</strong> &lt;${handle}&gt;<br>
+          <p><img src="${proxiedAvatar}" width="96" height="96" alt="${name}" style="border-radius: 4px;"></p>
         </div>
       </div>`;
 
-      // 4. Generate a clean title
-      const cleanText = data.content.replace(/<[^>]*>/g, '').trim();
-      const titleSnippet = cleanText.length > 60 ? cleanText.substring(0, 60) + "..." : cleanText;
-      const displayTitle = `${name} (@${handle}) ${titleSnippet || "Post"}`;
+      // 4. Generate a clean type-based title
+      let displayTitle = "";
+      if (isBoost) {
+        displayTitle = `🔁 Boost of @${handle}`;
+      } else if (isReply) {
+        // Find the handle of the person being replied to if possible
+        // Mastodon statuses often have mentions; we can try to find the first one that matches in_reply_to_account_id
+        const replyToAccount = data.mentions?.find(m => m.id === status.in_reply_to_account_id);
+        const replyHandle = replyToAccount ? replyToAccount.acct : "Post";
+        displayTitle = `↩️ Reply to @${replyHandle}`;
+      } else {
+        displayTitle = "💬 Status";
+      }
 
       return {
-        title: isBoost ? `🔁 ${displayTitle}` : displayTitle,
+        title: displayTitle,
         link: data.url,
         guid: {
           "@_isPermaLink": "true",
@@ -264,7 +288,7 @@ export class MastoService extends Service {
         },
         pubDate: new Date(data.created_at).toUTCString(),
         description: { "__cdata": html },
-        author: `${author.acct} (${author.display_name || author.username})`
+        author: `${name} <${handle}>`
       };
     });
 
