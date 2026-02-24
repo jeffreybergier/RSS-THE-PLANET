@@ -170,10 +170,13 @@ export class MastoService extends Service {
     }
 
     const rss = this.convertJSONtoRSS(allStatuses, this.subtype, authKey, server);
+    const encodedRSS = new TextEncoder().encode(rss);
 
-    return new Response(rss, {
+    return new Response(encodedRSS, {
       headers: {
-        "Content-Type": "application/rss+xml; charset=utf-8"
+        "Content-Type": "text/xml; charset=utf-8",
+        "Content-Length": encodedRSS.byteLength.toString(),
+        "Cache-Control": "public, max-age=600"
       }
     });
   }

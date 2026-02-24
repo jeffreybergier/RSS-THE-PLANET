@@ -40,6 +40,8 @@ describe('OPML Service Integration', () => {
     const response = await Router.route(request, env, ctx);
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toBe('text/x-opml');
+    expect(response.headers.get('Content-Length')).toBeDefined();
+    expect(parseInt(response.headers.get('Content-Length'))).toBeGreaterThan(0);
 
     const rewrittenOpml = await response.text();
     expect(rewrittenOpml).toContain('proxy');
