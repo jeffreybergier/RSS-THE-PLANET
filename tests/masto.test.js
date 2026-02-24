@@ -231,14 +231,14 @@ describe('Masto Service Integration', () => {
       // Check Boost
       expect(xml).toContain('<title>🔁 Boost of @original@mastodon.test</title>');
       expect(xml).toContain('<small>🔁 Boosted by The Booster &lt;booster@mastodon.test&gt;</small>');
-      expect(xml).toContain('<author>Original Author &lt;original@mastodon.test&gt;</author>');
+      expect(xml).toContain('<author>original@mastodon.test (Original Author)</author>');
       expect(xml).toContain('<strong>Original Author</strong> &lt;original@mastodon.test&gt;<br>');
       expect(xml).toContain('boosted content');
 
       // Check Reply
       expect(xml).toContain('<title>↩️ Reply to @original</title>');
       expect(xml).toContain('<small>↩️ Reply to @original</small>');
-      expect(xml).toContain('<author>The Replier &lt;replier@mastodon.test&gt;</author>');
+      expect(xml).toContain('<author>replier@mastodon.test (The Replier)</author>');
       expect(xml).toContain('<strong>The Replier</strong> &lt;replier@mastodon.test&gt;<br>');
       expect(xml).toContain('reply content');
       

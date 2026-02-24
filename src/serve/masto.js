@@ -188,6 +188,7 @@ export class MastoService extends Service {
       ignoreAttributes: false,
       attributeNamePrefix: "@_",
       format: true,
+      suppressBooleanAttributes: false,
       suppressEmptyNode: true,
       cdataPropName: "__cdata"
     });
@@ -291,7 +292,7 @@ export class MastoService extends Service {
         },
         pubDate: new Date(data.created_at).toUTCString(),
         description: { "__cdata": html },
-        author: `${name} <${handle}>`
+        author: `${handle} (${name})`
       };
     });
 
@@ -303,9 +304,15 @@ export class MastoService extends Service {
         "@_version": "2.0",
         "@_xmlns:content": "http://purl.org/rss/1.0/modules/content/",
         "@_xmlns:dc": "http://purl.org/dc/elements/1.1/",
+        "@_xmlns:atom": "http://www.w3.org/2005/Atom",
         channel: {
           title: channelTitle,
           link: this.requestURL.origin,
+          "atom:link": {
+            "@_href": this.requestURL.href,
+            "@_rel": "self",
+            "@_type": "application/rss+xml"
+          },
           description: `RSS THE PLANET: Mastodon ${subtype} feed`,
           language: "en-us",
           lastBuildDate: new Date().toUTCString(),

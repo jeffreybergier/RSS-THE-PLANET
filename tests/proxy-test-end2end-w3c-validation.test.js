@@ -133,9 +133,44 @@ function analyzeIssues(xmlResponse) {
 
 describe.sequential('E2E Feed Proxy Validation', () => {
   let serverProcess;
+  let mastoMockServer;
+  const mastoMockPort = 4444;
 
   beforeAll(async () => {
     console.error(`[E2E] Running suite with ${SELECTED_FEEDS.length} feeds from ${path.basename(OPML_PATH)}`);
+    
+    // Start Mastodon Mock Server
+    mastoMockServer = http.createServer((req, res) => {
+      if (req.url.includes('/api/v1/timelines/home')) {
+        if (req.url.includes('max_id=')) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify([]));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify([{ 
+          id: 'mock-id-1', 
+          created_at: new Date().toISOString(),
+          url: 'https://mastodon.test/@user/1',
+          content: '<p>This is a <strong>mock</strong> post for W3C validation testing.</p>',
+          account: {
+            username: 'mockuser',
+            acct: 'mockuser',
+            display_name: 'Mock User',
+            avatar: `http://localhost:${mastoMockPort}/avatar.png`
+          },
+          media_attachments: [],
+          replies_count: 5,
+          reblogs_count: 10,
+          favourites_count: 15
+        }]));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    mastoMockServer.listen(mastoMockPort);
+
     const isReady = await new Promise(resolve => {
       const req = http.get(TEST_PROXY_URL, () => resolve(true)).on('error', () => resolve(false));
       req.end();
@@ -144,7 +179,13 @@ describe.sequential('E2E Feed Proxy Validation', () => {
 
     const spawnCmd = TEST_TARGET === 'wrangler' ? 'npx' : process.execPath;
     const spawnArgs = TEST_TARGET === 'wrangler' ? ['wrangler', 'dev', '--port', DEFAULT_PORT] : ['./src/_node-boot.js'];
-    const env = { ...process.env, PORT: DEFAULT_PORT, HOST: '127.0.0.1', VALID_KEYS: VALID_KEYS_JSON };
+    const env = { 
+      ...process.env, 
+      PORT: DEFAULT_PORT, 
+      HOST: '127.0.0.1', 
+      VALID_KEYS: VALID_KEYS_JSON,
+      ENCRYPTION_SECRET: 'test-secret'
+    };
     serverProcess = spawn(spawnCmd, spawnArgs, { stdio: 'pipe', shell: TEST_TARGET === 'wrangler', env });
     
     let ready = false;
@@ -158,6 +199,7 @@ describe.sequential('E2E Feed Proxy Validation', () => {
 
   afterAll(() => {
     if (serverProcess) serverProcess.kill();
+    if (mastoMockServer) mastoMockServer.close();
   });
 
   test('Metadata: OPML feeds are loaded', () => {
@@ -192,5 +234,48 @@ describe.sequential('E2E Feed Proxy Validation', () => {
       }
       expect(regressions).toEqual([]);
     });
+  });
+
+  it('Mastodon: should generate a W3C-valid RSS feed', { timeout: 120000 }, async () => {
+    console.error(`[E2E] STARTING: Mastodon RSS Validation`);
+    
+    // 1. Setup Mock Credentials pointing to our local mock server
+    const formData = new URLSearchParams();
+    formData.append('server', `http://127.0.0.1:${mastoMockPort}`);
+    formData.append('apiKey', 'mock-token');
+    
+    const saveRes = await fetch(`${TEST_PROXY_URL}/masto/?key=${API_KEY}`, {
+      method: 'POST',
+      body: formData,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      redirect: 'manual'
+    });
+    expect(saveRes.status).toBe(302);
+    await wait(1000);
+
+    // 2. Fetch IDs to find our new entry
+    const listRes = await fetch(`${TEST_PROXY_URL}/masto/?key=${API_KEY}`);
+    const listHtml = await listRes.text();
+    const idMatch = listHtml.match(/\/masto\/([a-f0-9-]+)\/status\/home/);
+    expect(idMatch).not.toBeNull();
+    const mastoId = idMatch[1];
+
+    // 3. Fetch the RSS
+    const rssUrl = `${TEST_PROXY_URL}/masto/${mastoId}/status/home?key=${API_KEY}`;
+    const rssRes = await fetch(rssUrl);
+    expect(rssRes.ok).toBe(true);
+    const rssXml = await rssRes.text();
+
+    // 4. Validate with W3C
+    const w3cRes = await getW3CValidation(rssXml, null);
+    expect(w3cRes).not.toBeNull();
+    
+    const issues = analyzeIssues(w3cRes);
+    if (issues.length > 0) {
+      console.error(`[E2E] Mastodon RSS Validation FAILED:`, JSON.stringify(issues, null, 2));
+    } else {
+      console.error(`[E2E] Mastodon RSS Validation PASSED`);
+    }
+    expect(issues).toEqual([]);
   });
 });
