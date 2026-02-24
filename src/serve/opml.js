@@ -110,10 +110,12 @@ export class OPMLService extends Service {
       return renderError(500, "Failed to rewrite OPML", this.requestURL.pathname);
     }
 
-    return new Response(rewrittenOpml, {
+    const encodedOPML = new TextEncoder().encode(rewrittenOpml);
+    return new Response(encodedOPML, {
       headers: {
         "Content-Type": "text/x-opml",
-        "Content-Disposition": `attachment; filename="proxied_${name}"`
+        "Content-Disposition": `attachment; filename="proxied_${name}"`,
+        "Content-Length": encodedOPML.byteLength.toString()
       },
       status: 200
     });
@@ -136,10 +138,12 @@ export class OPMLService extends Service {
     const name = entry.name;
     const content = entry.value;
 
-    return new Response(content, {
+    const encodedOPML = new TextEncoder().encode(content);
+    return new Response(encodedOPML, {
       headers: {
         "Content-Type": "text/x-opml",
-        "Content-Disposition": `attachment; filename="${name}"`
+        "Content-Disposition": `attachment; filename="${name}"`,
+        "Content-Length": encodedOPML.byteLength.toString()
       },
       status: 200
     });
@@ -319,10 +323,12 @@ export class OPMLService extends Service {
       return new Response("Invalid OPML/XML format", { status: 400 });
     }
     
-    return new Response(rewrittenOpml, {
+    const encodedOPML = new TextEncoder().encode(rewrittenOpml);
+    return new Response(encodedOPML, {
       headers: {
         "Content-Type": "text/x-opml",
-        "Content-Disposition": `attachment; filename="rewritten_${file.name || 'feeds.opml'}"`
+        "Content-Disposition": `attachment; filename="rewritten_${file.name || 'feeds.opml'}"`,
+        "Content-Length": encodedOPML.byteLength.toString()
       }
     });
   }

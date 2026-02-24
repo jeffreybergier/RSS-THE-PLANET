@@ -115,8 +115,12 @@ export class ProxyService extends Service {
     { throw new Error("Parameter Error: submittedURL, baseURL, authKey"); }
     const encodedURL = Codec.encode(this.targetURL, this.option, this.baseURL, this.authKey);
     const bodyContent = `${encodedURL.toString()}`;
-    return new Response(bodyContent, {
-      headers: { "Content-Type": "text/plain" },
+    const encodedBody = new TextEncoder().encode(bodyContent);
+    return new Response(encodedBody, {
+      headers: { 
+        "Content-Type": "text/plain",
+        "Content-Length": encodedBody.byteLength.toString()
+      },
       status: 200
     });
   }
@@ -158,12 +162,13 @@ export class ProxyService extends Service {
       const rewrittenXML = await this.rewriteFeedXML(originalXML);
       
       // Return Response
-      const rewrittenXMLSize = new TextEncoder().encode(rewrittenXML).length;
+      const encodedXML = new TextEncoder().encode(rewrittenXML);
       const responseHeaders = ProxyService.sanitizedResponseHeaders(response.headers);
       responseHeaders.set('Content-Type', 'text/xml; charset=utf-8');
-      responseHeaders.set('Content-Length', rewrittenXMLSize);
-      console.log(`[ProxyService.feed] rewrite-done: ${this.targetURL.toString()} size: ${rewrittenXMLSize.toString()}`);
-      return new Response(rewrittenXML, {
+      responseHeaders.set('Content-Length', encodedXML.byteLength.toString());
+      responseHeaders.set('Cache-Control', 'public, max-age=600');
+      console.log(`[ProxyService.feed] rewrite-done: ${this.targetURL.toString()} size: ${encodedXML.byteLength.toString()}`);
+      return new Response(encodedXML, {
         status: response.status,
         headers: responseHeaders
       });

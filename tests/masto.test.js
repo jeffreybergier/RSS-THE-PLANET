@@ -119,7 +119,10 @@ describe('Masto Service Integration', () => {
       const statusRequest = new Request(`http://example.com/masto/${id}/status/home?key=test-key`);
       const response = await Router.route(statusRequest, env, ctx);
       expect(response.status).toBe(200);
-      expect(response.headers.get('Content-Type')).toContain('application/rss+xml');
+      expect(response.headers.get('Content-Type')).toContain('text/xml');
+      expect(response.headers.get('Content-Length')).toBeDefined();
+      expect(parseInt(response.headers.get('Content-Length'))).toBeGreaterThan(0);
+      expect(response.headers.get('Cache-Control')).toBe('public, max-age=600');
       
       const xml = await response.text();
       expect(xml).toContain('<rss');
