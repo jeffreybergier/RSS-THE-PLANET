@@ -168,13 +168,14 @@ describe('Masto Service Integration', () => {
             reblog: {
               id: '10',
               url: 'https://mastodon.test/@original/10',
-              content: '<p>boosted content</p>',
+              content: '<p>boosted content with <a href="https://mastodon.test/@mentioned">profile link</a></p>',
               account: {
                 username: 'original',
                 acct: 'original',
                 display_name: 'Original Author',
                 avatar: 'https://mastodon.test/avatar.png'
-              }
+              },
+              mentions: [{ id: '11', acct: 'mentioned', username: 'mentioned', url: 'https://mastodon.test/@mentioned' }]
             },
             account: {
               username: 'booster',
@@ -284,6 +285,11 @@ describe('Masto Service Integration', () => {
       expect(xml4).toContain('<title>↩️ to Author Name (author@mastodon.test)</title>');
       expect(xml4).toContain('<small>↩️ to Author Name (author@mastodon.test)</small>');
       globalThis.fetch = originalFetch4;
+
+      // Check Brutaldon URL rewriting (Item link only)
+      expect(xml).toContain('link>https://brutaldon.org/search_results?q=https%3A%2F%2Fmastodon.test%2F%40original%2F10</link>');
+      // HTML content should remain original
+      expect(xml).toContain('href="https://mastodon.test/@mentioned"');
     } finally {
       globalThis.fetch = originalFetch;
     }

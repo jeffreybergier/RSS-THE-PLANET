@@ -299,7 +299,7 @@ export class MastoService extends Service {
 
       return {
         title: displayTitle,
-        link: data.url,
+        link: this.wrapBrutaldon(data.url),
         guid: {
           "@_isPermaLink": "true",
           "#text": data.url
@@ -391,6 +391,11 @@ export class MastoService extends Service {
     }
     const name = account.display_name || account.username;
     return `${name} (${this.formatHandle(account, hostname)})`;
+  }
+
+  wrapBrutaldon(url) {
+    if (!url) return url;
+    return `https://brutaldon.org/search_results?q=${encodeURIComponent(url)}`;
   }
 
   async getSubmitForm(authKey, kvs) {
