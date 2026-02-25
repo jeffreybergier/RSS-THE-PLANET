@@ -264,6 +264,26 @@ describe('Masto Service Integration', () => {
       const xml3 = await res3.text();
       expect(xml3).toContain('<title>💬・📸・📹・🔗</title>');
       globalThis.fetch = originalFetch3;
+
+      // Check Thread Status (Self-Reply)
+      const threadStatusRequest = new Request(`http://example.com/masto/${id}/status/home?key=test-key`);
+      const originalFetch4 = globalThis.fetch;
+      globalThis.fetch = async () => new Response(JSON.stringify([{
+        id: '5',
+        in_reply_to_id: '4',
+        in_reply_to_account_id: 'author-id-123',
+        created_at: new Date().toISOString(),
+        url: 'https://mastodon.test/@author/5',
+        content: '<p>continuation of thread</p>',
+        account: { id: 'author-id-123', username: 'author', acct: 'author', display_name: 'Author Name', avatar: 'https://mastodon.test/avatar.png' },
+        mentions: []
+      }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+      const res4 = await Router.route(threadStatusRequest, env, ctx);
+      const xml4 = await res4.text();
+      expect(xml4).toContain('<title>↩️ to Author Name (author@mastodon.test)</title>');
+      expect(xml4).toContain('<small>↩️ to Author Name (author@mastodon.test)</small>');
+      globalThis.fetch = originalFetch4;
     } finally {
       globalThis.fetch = originalFetch;
     }

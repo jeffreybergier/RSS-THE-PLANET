@@ -196,9 +196,9 @@ export class MastoService extends Service {
     const hostname = new URL(serverUrl).hostname;
 
     const items = json.map(status => {
-      const isBoost = !!status.reblog;
-      const isReply = !!status.in_reply_to_id;
+      const isBoost = status.reblog;
       const data = isBoost ? status.reblog : status;
+      const isReply = data.in_reply_to_id;
       const author = data.account;
       const name = author.display_name || author.username;
       
@@ -216,8 +216,10 @@ export class MastoService extends Service {
       if (isBoost) {
         const booster = status.account;
         html += `<p><small>🚀 by ${this.formatAccountName(booster, hostname)}</small></p>`;
-      } else if (isReply) {
-        const replyToAccount = data.mentions?.find(m => m.id === status.in_reply_to_account_id);
+      } 
+      
+      if (isReply) {
+        const replyToAccount = data.mentions?.find(m => m.id === data.in_reply_to_account_id) || (data.in_reply_to_account_id === author.id ? author : null);
         const target = replyToAccount ? this.formatAccountName(replyToAccount, hostname) : "Post";
         html += `<p><small>↩️ to ${target}</small></p>`;
       }
@@ -269,14 +271,12 @@ export class MastoService extends Service {
 
       // 4. Generate a clean type-based title
       let displayTitle = "";
-      if (isBoost) {
-        displayTitle = `🚀 of ${this.formatAccountName(author, hostname)}`;
-      } else if (isReply) {
-        // Find the handle of the person being replied to if possible
-        // Mastodon statuses often have mentions; we can try to find the first one that matches in_reply_to_account_id
-        const replyToAccount = data.mentions?.find(m => m.id === status.in_reply_to_account_id);
+      if (isReply) {
+        const replyToAccount = data.mentions?.find(m => m.id === data.in_reply_to_account_id) || (data.in_reply_to_account_id === author.id ? author : null);
         const target = replyToAccount ? this.formatAccountName(replyToAccount, hostname) : "Post";
         displayTitle = `↩️ to ${target}`;
+      } else if (isBoost) {
+        displayTitle = `🚀 of ${this.formatAccountName(author, hostname)}`;
       } else {
         const types = [];
         const text = data.content?.replace(/<[^>]*>/g, '').trim() || "";
