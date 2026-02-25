@@ -193,14 +193,14 @@ export class MastoService extends Service {
       cdataPropName: "__cdata"
     });
 
+    const hostname = new URL(serverUrl).hostname;
+
     const items = json.map(status => {
       const isBoost = !!status.reblog;
       const isReply = !!status.in_reply_to_id;
       const data = isBoost ? status.reblog : status;
       const author = data.account;
       const name = author.display_name || author.username;
-      const hostname = new URL(serverUrl).hostname;
-      const handle = author.acct.includes('@') ? author.acct : `${author.acct}@${hostname}`;
       
       // 1. Proxy the avatar
       let proxiedAvatar = "";
@@ -215,13 +215,11 @@ export class MastoService extends Service {
 
       if (isBoost) {
         const booster = status.account;
-        const boosterName = booster.display_name || booster.username;
-        const boosterHandle = booster.acct.includes('@') ? booster.acct : `${booster.acct}@${hostname}`;
-        html += `<p><small>🔁 Boosted by ${boosterName} &lt;${boosterHandle}&gt;</small></p>`;
+        html += `<p><small>🚀 by ${this.formatAccountName(booster, hostname)}</small></p>`;
       } else if (isReply) {
         const replyToAccount = data.mentions?.find(m => m.id === status.in_reply_to_account_id);
-        const replyHandle = replyToAccount ? replyToAccount.acct : "Post";
-        html += `<p><small>↩️ Reply to @${replyHandle}</small></p>`;
+        const target = replyToAccount ? this.formatAccountName(replyToAccount, hostname) : "Post";
+        html += `<p><small>↩️ to ${target}</small></p>`;
       }
 
       // Add the actual post content
@@ -264,7 +262,7 @@ export class MastoService extends Service {
         </p>
         <hr>
         <div>
-          <strong>${name}</strong> &lt;${handle}&gt;<br>
+          <strong>${this.formatAccountName(author, hostname)}</strong><br>
           <p><img src="${proxiedAvatar}" width="96" height="96" alt="${name}" style="border-radius: 4px;"></p>
         </div>
       </div>`;
@@ -272,13 +270,13 @@ export class MastoService extends Service {
       // 4. Generate a clean type-based title
       let displayTitle = "";
       if (isBoost) {
-        displayTitle = `🔁 Boost of @${handle}`;
+        displayTitle = `🚀 of ${this.formatAccountName(author, hostname)}`;
       } else if (isReply) {
         // Find the handle of the person being replied to if possible
         // Mastodon statuses often have mentions; we can try to find the first one that matches in_reply_to_account_id
         const replyToAccount = data.mentions?.find(m => m.id === status.in_reply_to_account_id);
-        const replyHandle = replyToAccount ? replyToAccount.acct : "Post";
-        displayTitle = `↩️ Reply to @${replyHandle}`;
+        const target = replyToAccount ? this.formatAccountName(replyToAccount, hostname) : "Post";
+        displayTitle = `↩️ to ${target}`;
       } else {
         displayTitle = "💬 Status";
       }
@@ -292,7 +290,7 @@ export class MastoService extends Service {
         },
         pubDate: new Date(data.created_at).toUTCString(),
         description: { "__cdata": html },
-        author: `${handle} (${name})`
+        "dc:creator": this.formatAccountName(author, hostname)
       };
     });
 
@@ -361,6 +359,22 @@ export class MastoService extends Service {
       console.error(`[MastoService.handlePost] error: ${e.message}`);
       return renderError(500, "Failed to save credentials", this.requestURL.pathname);
     }
+  }
+
+  formatHandle(account, hostname) {
+    if (!account) {
+      return "Unknown";
+    }
+    const handle = account.acct.includes('@') ? account.acct : `${account.acct}@${hostname}`;
+    return handle;
+  }
+
+  formatAccountName(account, hostname) {
+    if (!account) {
+      return "Unknown";
+    }
+    const name = account.display_name || account.username;
+    return `${name} (${this.formatHandle(account, hostname)})`;
   }
 
   async getSubmitForm(authKey, kvs) {

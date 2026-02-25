@@ -229,17 +229,17 @@ describe('Masto Service Integration', () => {
       globalThis.fetch = originalFetch2;
       
       // Check Boost
-      expect(xml).toContain('<title>🔁 Boost of @original@mastodon.test</title>');
-      expect(xml).toContain('<small>🔁 Boosted by The Booster &lt;booster@mastodon.test&gt;</small>');
-      expect(xml).toContain('<author>original@mastodon.test (Original Author)</author>');
-      expect(xml).toContain('<strong>Original Author</strong> &lt;original@mastodon.test&gt;<br>');
+      expect(xml).toContain('<title>🚀 of Original Author (original@mastodon.test)</title>');
+      expect(xml).toContain('<small>🚀 by The Booster (booster@mastodon.test)</small>');
+      expect(xml).toContain('<dc:creator>Original Author (original@mastodon.test)</dc:creator>');
+      expect(xml).toContain('<strong>Original Author (original@mastodon.test)</strong><br>');
       expect(xml).toContain('boosted content');
 
       // Check Reply
-      expect(xml).toContain('<title>↩️ Reply to @original</title>');
-      expect(xml).toContain('<small>↩️ Reply to @original</small>');
-      expect(xml).toContain('<author>replier@mastodon.test (The Replier)</author>');
-      expect(xml).toContain('<strong>The Replier</strong> &lt;replier@mastodon.test&gt;<br>');
+      expect(xml).toContain('<title>↩️ to original (original@mastodon.test)</title>');
+      expect(xml).toContain('<small>↩️ to original (original@mastodon.test)</small>');
+      expect(xml).toContain('<dc:creator>The Replier (replier@mastodon.test)</dc:creator>');
+      expect(xml).toContain('<strong>The Replier (replier@mastodon.test)</strong><br>');
       expect(xml).toContain('reply content');
       
       // Check Footer Emoji
