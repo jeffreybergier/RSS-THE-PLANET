@@ -278,7 +278,23 @@ export class MastoService extends Service {
         const target = replyToAccount ? this.formatAccountName(replyToAccount, hostname) : "Post";
         displayTitle = `↩️ to ${target}`;
       } else {
-        displayTitle = "💬 Status";
+        const types = [];
+        const text = data.content?.replace(/<[^>]*>/g, '').trim() || "";
+        if (text.length > 0) types.push("💬");
+        
+        const hasImages = data.media_attachments?.some(m => m.type === 'image');
+        const hasVideos = data.media_attachments?.some(m => m.type === 'video' || m.type === 'gifv');
+        if (hasImages) types.push("📸");
+        if (hasVideos) types.push("📹");
+
+        const linkCount = (data.content?.match(/<a /g) || []).length;
+        const mentionCount = (data.mentions || []).length;
+        const tagCount = (data.tags || []).length;
+        if (data.card || linkCount > (mentionCount + tagCount)) {
+          types.push("🔗");
+        }
+
+        displayTitle = types.join("・") || "💬 Status";
       }
 
       return {

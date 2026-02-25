@@ -225,7 +225,7 @@ describe('Masto Service Integration', () => {
 
       const res2 = await Router.route(normalStatusRequest, env, ctx);
       const xml2 = await res2.text();
-      expect(xml2).toContain('<title>💬 Status</title>');
+      expect(xml2).toContain('<title>💬</title>');
       globalThis.fetch = originalFetch2;
       
       // Check Boost
@@ -244,6 +244,26 @@ describe('Masto Service Integration', () => {
       
       // Check Footer Emoji
       expect(xml).toContain('↩️ 0'); // replies_count
+
+      // Check Complex Media Status (Images + Video + Link)
+      const complexStatusRequest = new Request(`http://example.com/masto/${id}/status/home?key=test-key`);
+      const originalFetch3 = globalThis.fetch;
+      globalThis.fetch = async () => new Response(JSON.stringify([{
+        id: '4',
+        created_at: new Date().toISOString(),
+        url: 'https://mastodon.test/@user/4',
+        content: '<p>Check this <a href="https://example.com">Link</a></p>',
+        account: { username: 'user', acct: 'user', display_name: 'User', avatar: 'https://mastodon.test/avatar.png' },
+        media_attachments: [
+          { type: 'image', url: 'https://mastodon.test/img.png' },
+          { type: 'video', url: 'https://mastodon.test/vid.mp4' }
+        ]
+      }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+      const res3 = await Router.route(complexStatusRequest, env, ctx);
+      const xml3 = await res3.text();
+      expect(xml3).toContain('<title>💬・📸・📹・🔗</title>');
+      globalThis.fetch = originalFetch3;
     } finally {
       globalThis.fetch = originalFetch;
     }
