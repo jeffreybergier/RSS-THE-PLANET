@@ -168,13 +168,14 @@ describe('Masto Service Integration', () => {
             reblog: {
               id: '10',
               url: 'https://mastodon.test/@original/10',
-              content: '<p>boosted content</p>',
+              content: '<p>boosted content with <a href="https://mastodon.test/@mentioned">profile link</a></p>',
               account: {
                 username: 'original',
                 acct: 'original',
                 display_name: 'Original Author',
                 avatar: 'https://mastodon.test/avatar.png'
-              }
+              },
+              mentions: [{ id: '11', acct: 'mentioned', username: 'mentioned', url: 'https://mastodon.test/@mentioned' }]
             },
             account: {
               username: 'booster',
@@ -225,25 +226,70 @@ describe('Masto Service Integration', () => {
 
       const res2 = await Router.route(normalStatusRequest, env, ctx);
       const xml2 = await res2.text();
-      expect(xml2).toContain('<title>💬 Status</title>');
+      expect(xml2).toContain('<title>💬</title>');
       globalThis.fetch = originalFetch2;
       
       // Check Boost
-      expect(xml).toContain('<title>🔁 Boost of @original@mastodon.test</title>');
-      expect(xml).toContain('<small>🔁 Boosted by The Booster &lt;booster@mastodon.test&gt;</small>');
-      expect(xml).toContain('<author>original@mastodon.test (Original Author)</author>');
-      expect(xml).toContain('<strong>Original Author</strong> &lt;original@mastodon.test&gt;<br>');
+      expect(xml).toContain('<title>🚀 of Original Author (original@mastodon.test)</title>');
+      expect(xml).toContain('<small>🚀 by The Booster (booster@mastodon.test)</small>');
+      expect(xml).toContain('<dc:creator>Original Author (original@mastodon.test)</dc:creator>');
+      expect(xml).toContain('<strong>Original Author (original@mastodon.test)</strong><br>');
       expect(xml).toContain('boosted content');
 
       // Check Reply
-      expect(xml).toContain('<title>↩️ Reply to @original</title>');
-      expect(xml).toContain('<small>↩️ Reply to @original</small>');
-      expect(xml).toContain('<author>replier@mastodon.test (The Replier)</author>');
-      expect(xml).toContain('<strong>The Replier</strong> &lt;replier@mastodon.test&gt;<br>');
+      expect(xml).toContain('<title>↩️ to original (original@mastodon.test)</title>');
+      expect(xml).toContain('<small>↩️ to original (original@mastodon.test)</small>');
+      expect(xml).toContain('<dc:creator>The Replier (replier@mastodon.test)</dc:creator>');
+      expect(xml).toContain('<strong>The Replier (replier@mastodon.test)</strong><br>');
       expect(xml).toContain('reply content');
       
       // Check Footer Emoji
       expect(xml).toContain('↩️ 0'); // replies_count
+
+      // Check Complex Media Status (Images + Video + Link)
+      const complexStatusRequest = new Request(`http://example.com/masto/${id}/status/home?key=test-key`);
+      const originalFetch3 = globalThis.fetch;
+      globalThis.fetch = async () => new Response(JSON.stringify([{
+        id: '4',
+        created_at: new Date().toISOString(),
+        url: 'https://mastodon.test/@user/4',
+        content: '<p>Check this <a href="https://example.com">Link</a></p>',
+        account: { username: 'user', acct: 'user', display_name: 'User', avatar: 'https://mastodon.test/avatar.png' },
+        media_attachments: [
+          { type: 'image', url: 'https://mastodon.test/img.png' },
+          { type: 'video', url: 'https://mastodon.test/vid.mp4' }
+        ]
+      }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+      const res3 = await Router.route(complexStatusRequest, env, ctx);
+      const xml3 = await res3.text();
+      expect(xml3).toContain('<title>💬・📸・📹・🔗</title>');
+      globalThis.fetch = originalFetch3;
+
+      // Check Thread Status (Self-Reply)
+      const threadStatusRequest = new Request(`http://example.com/masto/${id}/status/home?key=test-key`);
+      const originalFetch4 = globalThis.fetch;
+      globalThis.fetch = async () => new Response(JSON.stringify([{
+        id: '5',
+        in_reply_to_id: '4',
+        in_reply_to_account_id: 'author-id-123',
+        created_at: new Date().toISOString(),
+        url: 'https://mastodon.test/@author/5',
+        content: '<p>continuation of thread</p>',
+        account: { id: 'author-id-123', username: 'author', acct: 'author', display_name: 'Author Name', avatar: 'https://mastodon.test/avatar.png' },
+        mentions: []
+      }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+      const res4 = await Router.route(threadStatusRequest, env, ctx);
+      const xml4 = await res4.text();
+      expect(xml4).toContain('<title>↩️ to Author Name (author@mastodon.test)</title>');
+      expect(xml4).toContain('<small>↩️ to Author Name (author@mastodon.test)</small>');
+      globalThis.fetch = originalFetch4;
+
+      // Check Brutaldon URL rewriting (Item link only)
+      expect(xml).toContain('link>https://brutaldon.org/search_results?q=https%3A%2F%2Fmastodon.test%2F%40original%2F10</link>');
+      // HTML content should remain original
+      expect(xml).toContain('href="https://mastodon.test/@mentioned"');
     } finally {
       globalThis.fetch = originalFetch;
     }
