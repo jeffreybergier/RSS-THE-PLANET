@@ -106,7 +106,8 @@ describe('Masto Service Integration', () => {
             avatar: 'https://mastodon.test/avatar.png',
             url: 'https://mastodon.test/@user'
           },
-          media_attachments: []
+          media_attachments: [],
+          language: "en"
         }]), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }
@@ -127,6 +128,14 @@ describe('Masto Service Integration', () => {
       const xml = await response.text();
       expect(xml).toContain('<rss');
       expect(xml).toContain('<channel>');
+      expect(xml).toContain('<title>mastodon.test - Home</title>');
+      expect(xml).toContain('<link>https://mastodon.test</link>');
+      expect(xml).toContain('<description>RSS-THE-PLANET Mastodon Feed</description>');
+      expect(xml).toContain('<sy:updatePeriod>hourly</sy:updatePeriod>');
+      expect(xml).toContain('<sy:updateFrequency>1</sy:updateFrequency>');
+      expect(xml).toContain('<generator>RSS-THE-PLANET</generator>');
+      expect(xml).not.toContain('<atom:link');
+      expect(xml).toContain('<dc:language>en</dc:language>');
       expect(xml).toContain('test post');
       // Verify avatar is present (proxied) and has the correct size
       // Base64 of encodeURIComponent('https://mastodon.test/avatar.png')
