@@ -216,62 +216,57 @@ export class MastoService extends Service {
       const name = account.display_name || account.username;
       
       let title = "";
-      let html = "<div>";
+      let html = "";
       let url = status?.url || account.url;
 
-      // Proxy account avatar
+      // Build Triggerer Signature
       let proxiedAvatar = "";
       try {
         proxiedAvatar = Codec.encode(new URL(account.avatar), Option.image, this.baseURL, authKey).toString();
       } catch (e) {
         proxiedAvatar = account.avatar;
       }
-
-      switch (type) {
-        case 'mention':
-          title = `💬 Mention from ${name}`;
-          html += `<div>${status?.content || ""}</div>`;
-          break;
-        case 'reblog':
-          title = `🔁 Boosted by ${name}`;
-          html += `<div>${status?.content || ""}</div>`;
-          break;
-        case 'favourite':
-          title = `⭐ Favorited by ${name}`;
-          html += `<div>${status?.content || ""}</div>`;
-          break;
-        case 'follow':
-          title = `👤 Followed by ${name}`;
-          html += `<p>${name} followed you.</p>`;
-          break;
-        case 'follow_request':
-          title = `🔒 Follow request from ${name}`;
-          html += `<p>${name} wants to follow you.</p>`;
-          break;
-        case 'poll':
-          title = `🗳️ Poll finished: ${status?.content?.substring(0, 30)}...`;
-          html += `<div>${status?.content || ""}</div>`;
-          break;
-        case 'status':
-          title = `🔔 Post from ${name}`;
-          html += `<div>${status?.content || ""}</div>`;
-          break;
-        case 'update':
-          title = `📝 Post edited by ${name}`;
-          html += `<div>${status?.content || ""}</div>`;
-          break;
-        default:
-          title = `🔔 ${type} from ${name}`;
-          html += `<p>Notification type: ${type}</p>`;
-      }
-
-      html += `
-        <hr>
+      const triggererSignature = `
         <div>
           <strong>${this.formatAccountName(account, hostname)}</strong><br>
           <p><img src="${proxiedAvatar}" width="96" height="96" alt="${name}" style="border-radius: 4px;"></p>
         </div>
-      </div>`;
+      `;
+
+      if (status) {
+        html = `<div>${triggererSignature}<hr>${this.formatStatusContent(status, authKey, hostname)}</div>`;
+      } else {
+        html = `<div>${triggererSignature}</div>`;
+      }
+
+      switch (type) {
+        case 'mention':
+          title = `💬 Mention from ${name}`;
+          break;
+        case 'reblog':
+          title = `🔁 Boosted by ${name}`;
+          break;
+        case 'favourite':
+          title = `⭐ Favorited by ${name}`;
+          break;
+        case 'follow':
+          title = `👤 Followed by ${name}`;
+          break;
+        case 'follow_request':
+          title = `🔒 Follow request from ${name}`;
+          break;
+        case 'poll':
+          title = `🗳️ Poll finished: ${status?.content?.substring(0, 30)}...`;
+          break;
+        case 'status':
+          title = `🔔 Post from ${name}`;
+          break;
+        case 'update':
+          title = `📝 Post edited by ${name}`;
+          break;
+        default:
+          title = `🔔 ${type} from ${name}`;
+      }
 
       return {
         title: title,
@@ -332,65 +327,11 @@ export class MastoService extends Service {
       const data = isBoost ? status.reblog : status;
       const isReply = data.in_reply_to_id;
       const author = data.account;
-      const name = author.display_name || author.username;
-      
-      // 1. Proxy the avatar
-      let proxiedAvatar = "";
-      try {
-        proxiedAvatar = Codec.encode(new URL(author.avatar), Option.image, this.baseURL, authKey).toString();
-      } catch (e) {
-        proxiedAvatar = author.avatar;
-      }
 
-      // 2. Build RSS Content
-      let html = `<div>`;
+      // 1. Build RSS Content
+      const html = this.formatStatusContent(data, authKey, hostname);
 
-      // Add the actual post content
-      html += `<div>${data.content}</div>`;
-
-      // 3. Handle Media Attachments
-      if (data.media_attachments && data.media_attachments.length > 0) {
-        html += '<div class="media">';
-        data.media_attachments.forEach(media => {
-          try {
-            const altText = media.description || '';
-            if (media.type === 'image') {
-              const proxiedMedia = Codec.encode(new URL(media.url), Option.image, this.baseURL, authKey).toString();
-              html += `<p><img src="${proxiedMedia}" alt="${altText}"></p>`;
-            } else if (media.type === 'video' || media.type === 'gifv') {
-              const proxiedVideo = Codec.encode(new URL(media.url), Option.asset, this.baseURL, authKey).toString();
-              let posterAttr = "";
-              if (media.preview_url) {
-                const proxiedPoster = Codec.encode(new URL(media.preview_url), Option.image, this.baseURL, authKey).toString();
-                posterAttr = `poster="${proxiedPoster}"`;
-              }
-              html += `<p><video controls playsinline loop ${posterAttr} src="${proxiedVideo}"></video></p>`;
-            } else {
-              // audio, unknown
-              const proxiedLink = Codec.encode(new URL(media.url), Option.auto, this.baseURL, authKey).toString();
-              const linkTitle = altText ? `View ${media.type}: ${altText}` : `View ${media.type} attachment`;
-              html += `<p><a href="${proxiedLink}">${linkTitle}</a></p>`;
-            }
-          } catch (e) {
-            console.error(`[MastoService.convertJSONtoRSS] Media Error: ${e.message} url: ${media.url}`);
-            html += `<p><a href="${media.url}">View ${media.type} attachment</a></p>`;
-          }
-        });
-        html += '</div>';
-      }
-
-      html += `
-        <p>
-          ↩️ ${data.replies_count || 0}・🔁 ${data.reblogs_count || 0}・⭐ ${data.favourites_count || 0}
-        </p>
-        <hr>
-        <div>
-          <strong>${this.formatAccountName(author, hostname)}</strong><br>
-          <p><img src="${proxiedAvatar}" width="96" height="96" alt="${name}" style="border-radius: 4px;"></p>
-        </div>
-      </div>`;
-
-      // 4. Generate a clean type-based title
+      // 2. Generate a clean type-based title
       let displayTitle = "";
       if (isReply) {
         const replyToAccount = data.mentions?.find(m => m.id === data.in_reply_to_account_id) || (data.in_reply_to_account_id === author.id ? author : null);
@@ -518,6 +459,69 @@ export class MastoService extends Service {
   wrapBrutaldon(url) {
     if (!url) return url;
     return `https://brutaldon.org/search_results?q=${encodeURIComponent(url)}`;
+  }
+
+  formatStatusContent(data, authKey, hostname) {
+    const author = data.account;
+    const name = author.display_name || author.username;
+    
+    // 1. Proxy the avatar
+    let proxiedAvatar = "";
+    try {
+      proxiedAvatar = Codec.encode(new URL(author.avatar), Option.image, this.baseURL, authKey).toString();
+    } catch (e) {
+      proxiedAvatar = author.avatar;
+    }
+
+    // 2. Build RSS Content
+    let html = `<div>`;
+
+    // Add the actual post content
+    html += `<div>${data.content}</div>`;
+
+    // 3. Handle Media Attachments
+    if (data.media_attachments && data.media_attachments.length > 0) {
+      html += '<div class="media">';
+      data.media_attachments.forEach(media => {
+        try {
+          const altText = media.description || '';
+          if (media.type === 'image') {
+            const proxiedMedia = Codec.encode(new URL(media.url), Option.image, this.baseURL, authKey).toString();
+            html += `<p><img src="${proxiedMedia}" alt="${altText}"></p>`;
+          } else if (media.type === 'video' || media.type === 'gifv') {
+            const proxiedVideo = Codec.encode(new URL(media.url), Option.asset, this.baseURL, authKey).toString();
+            let posterAttr = "";
+            if (media.preview_url) {
+              const proxiedPoster = Codec.encode(new URL(media.preview_url), Option.image, this.baseURL, authKey).toString();
+              posterAttr = `poster="${proxiedPoster}"`;
+            }
+            html += `<p><video controls playsinline loop ${posterAttr} src="${proxiedVideo}"></video></p>`;
+          } else {
+            // audio, unknown
+            const proxiedLink = Codec.encode(new URL(media.url), Option.auto, this.baseURL, authKey).toString();
+            const linkTitle = altText ? `View ${media.type}: ${altText}` : `View ${media.type} attachment`;
+            html += `<p><a href="${proxiedLink}">${linkTitle}</a></p>`;
+          }
+        } catch (e) {
+          console.error(`[MastoService.formatStatusContent] Media Error: ${e.message} url: ${media.url}`);
+          html += `<p><a href="${media.url}">View ${media.type} attachment</a></p>`;
+        }
+      });
+      html += '</div>';
+    }
+
+    html += `
+        <p>
+          ↩️ ${data.replies_count || 0}・🔁 ${data.reblogs_count || 0}・⭐ ${data.favourites_count || 0}
+        </p>
+        <hr>
+        <div>
+          <strong>${this.formatAccountName(author, hostname)}</strong><br>
+          <p><img src="${proxiedAvatar}" width="96" height="96" alt="${name}" style="border-radius: 4px;"></p>
+        </div>
+      </div>`;
+    
+    return html;
   }
 
   async getSubmitForm(authKey, kvs) {

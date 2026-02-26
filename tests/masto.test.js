@@ -328,20 +328,50 @@ describe('Masto Service Integration', () => {
             type: 'mention',
             created_at: new Date().toISOString(),
             account: { username: 'user1', acct: 'user1', display_name: 'User One', avatar: 'https://mastodon.test/avatar1.png' },
-            status: { content: '<p>Hello there!</p>', url: 'https://mastodon.test/@user1/1' }
+            status: { 
+              content: '<p>Hello there!</p>', 
+              url: 'https://mastodon.test/@user1/1',
+              account: { username: 'original_author', acct: 'original_author', display_name: 'Original Author', avatar: 'https://mastodon.test/avatar_oa.png' }
+            }
           },
           {
             id: '101',
             type: 'favourite',
             created_at: new Date().toISOString(),
             account: { username: 'user2', acct: 'user2', display_name: 'User Two', avatar: 'https://mastodon.test/avatar2.png' },
-            status: { content: '<p>Original post content</p>', url: 'https://mastodon.test/@me/10' }
+            status: { 
+              content: '<p>Original post content</p>', 
+              url: 'https://mastodon.test/@me/10',
+              account: { username: 'me', acct: 'me', display_name: 'Me', avatar: 'https://mastodon.test/avatar_me.png' }
+            }
           },
           {
             id: '102',
             type: 'follow',
             created_at: new Date().toISOString(),
             account: { username: 'user3', acct: 'user3', display_name: 'User Three', avatar: 'https://mastodon.test/avatar3.png', url: 'https://mastodon.test/@user3' }
+          },
+          {
+            id: '103',
+            type: 'reblog',
+            created_at: new Date().toISOString(),
+            account: { username: 'user4', acct: 'user4', display_name: 'User Four', avatar: 'https://mastodon.test/avatar4.png' },
+            status: { 
+              content: '<p>Boosted post</p>', 
+              url: 'https://mastodon.test/@user4/4',
+              account: { username: 'author4', acct: 'author4', display_name: 'Author Four', avatar: 'https://mastodon.test/avatar4.png' }
+            }
+          },
+          {
+            id: '104',
+            type: 'poll',
+            created_at: new Date().toISOString(),
+            account: { username: 'user5', acct: 'user5', display_name: 'User Five', avatar: 'https://mastodon.test/avatar5.png' },
+            status: { 
+              content: '<p>Poll results are in!</p>', 
+              url: 'https://mastodon.test/@user5/5',
+              account: { username: 'user5', acct: 'user5', display_name: 'User Five', avatar: 'https://mastodon.test/avatar5.png' }
+            }
           }
         ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
@@ -358,8 +388,11 @@ describe('Masto Service Integration', () => {
       expect(xml).toContain('<title>💬 Mention from User One</title>');
       expect(xml).toContain('<title>⭐ Favorited by User Two</title>');
       expect(xml).toContain('<title>👤 Followed by User Three</title>');
+      expect(xml).toContain('<title>🔁 Boosted by User Four</title>');
+      expect(xml).toContain('<title>🗳️ Poll finished: &lt;p&gt;Poll results are in!&lt;/p&gt;...</title>');
       expect(xml).toContain('Hello there!');
-      expect(xml).toContain('User Three followed you.');
+      expect(xml).toContain('Boosted post');
+      expect(xml).toContain('Poll results are in!');
     } finally {
       globalThis.fetch = originalFetch;
     }
