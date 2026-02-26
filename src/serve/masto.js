@@ -213,17 +213,6 @@ export class MastoService extends Service {
       // 2. Build RSS Content
       let html = `<div>`;
 
-      if (isBoost) {
-        const booster = status.account;
-        html += `<p><small>🚀 by ${this.formatAccountName(booster, hostname)}</small></p>`;
-      } 
-      
-      if (isReply) {
-        const replyToAccount = data.mentions?.find(m => m.id === data.in_reply_to_account_id) || (data.in_reply_to_account_id === author.id ? author : null);
-        const target = replyToAccount ? this.formatAccountName(replyToAccount, hostname) : "Post";
-        html += `<p><small>↩️ to ${target}</small></p>`;
-      }
-
       // Add the actual post content
       html += `<div>${data.content}</div>`;
 
@@ -273,10 +262,11 @@ export class MastoService extends Service {
       let displayTitle = "";
       if (isReply) {
         const replyToAccount = data.mentions?.find(m => m.id === data.in_reply_to_account_id) || (data.in_reply_to_account_id === author.id ? author : null);
-        const target = replyToAccount ? this.formatAccountName(replyToAccount, hostname) : "Post";
+        const target = replyToAccount ? (replyToAccount.display_name || replyToAccount.username) : "Post";
         displayTitle = `↩️ to ${target}`;
       } else if (isBoost) {
-        displayTitle = `🚀 of ${this.formatAccountName(author, hostname)}`;
+        const booster = status.account;
+        displayTitle = `🚀 by ${booster.display_name || booster.username}`;
       } else {
         const types = [];
         const text = data.content?.replace(/<[^>]*>/g, '').trim() || "";
@@ -294,7 +284,8 @@ export class MastoService extends Service {
           types.push("🔗");
         }
 
-        displayTitle = types.join("・") || "💬 Status";
+        const emojiTitle = types.join("・") || "💬";
+        displayTitle = `${emojiTitle} from ${author.display_name || author.username}`;
       }
 
       return {

@@ -226,19 +226,17 @@ describe('Masto Service Integration', () => {
 
       const res2 = await Router.route(normalStatusRequest, env, ctx);
       const xml2 = await res2.text();
-      expect(xml2).toContain('<title>💬</title>');
+      expect(xml2).toContain('<title>💬 from User</title>');
       globalThis.fetch = originalFetch2;
       
       // Check Boost
-      expect(xml).toContain('<title>🚀 of Original Author (original@mastodon.test)</title>');
-      expect(xml).toContain('<small>🚀 by The Booster (booster@mastodon.test)</small>');
+      expect(xml).toContain('<title>🚀 by The Booster</title>');
       expect(xml).toContain('<dc:creator>Original Author (original@mastodon.test)</dc:creator>');
       expect(xml).toContain('<strong>Original Author (original@mastodon.test)</strong><br>');
       expect(xml).toContain('boosted content');
 
       // Check Reply
-      expect(xml).toContain('<title>↩️ to original (original@mastodon.test)</title>');
-      expect(xml).toContain('<small>↩️ to original (original@mastodon.test)</small>');
+      expect(xml).toContain('<title>↩️ to original</title>');
       expect(xml).toContain('<dc:creator>The Replier (replier@mastodon.test)</dc:creator>');
       expect(xml).toContain('<strong>The Replier (replier@mastodon.test)</strong><br>');
       expect(xml).toContain('reply content');
@@ -263,7 +261,7 @@ describe('Masto Service Integration', () => {
 
       const res3 = await Router.route(complexStatusRequest, env, ctx);
       const xml3 = await res3.text();
-      expect(xml3).toContain('<title>💬・📷・📹・🔗</title>');
+      expect(xml3).toContain('<title>💬・📷・📹・🔗 from User</title>');
       globalThis.fetch = originalFetch3;
 
       // Check Thread Status (Self-Reply)
@@ -282,8 +280,7 @@ describe('Masto Service Integration', () => {
 
       const res4 = await Router.route(threadStatusRequest, env, ctx);
       const xml4 = await res4.text();
-      expect(xml4).toContain('<title>↩️ to Author Name (author@mastodon.test)</title>');
-      expect(xml4).toContain('<small>↩️ to Author Name (author@mastodon.test)</small>');
+      expect(xml4).toContain('<title>↩️ to Author Name</title>');
       globalThis.fetch = originalFetch4;
 
       // Check Brutaldon URL rewriting (Item link only)
