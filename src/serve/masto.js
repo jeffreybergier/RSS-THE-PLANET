@@ -60,6 +60,9 @@ export class MastoService extends Service {
       if (type === 'status') {
         return await this.handleStatus(authKey, kvs);
       }
+      if (type === 'notifications') {
+        return await this.handleStatus(authKey, kvs);
+      }
 
       return await this.getSubmitForm(authKey, kvs);
     } catch (error) {
@@ -96,7 +99,7 @@ export class MastoService extends Service {
     if (!authKey || !kvs) {
       return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
     }
-    if (!this.uuid || !this.subtype) {
+    if (!this.uuid || (!this.subtype && this.type !== 'notifications')) {
       return renderError(400, "Invalid Request", this.requestURL.pathname);
     }
 
@@ -113,12 +116,13 @@ export class MastoService extends Service {
       return renderError(500, "Could not decrypt credentials. Please re-save them.", this.requestURL.pathname);
     }
 
+    const mode = this.type === 'notifications' ? 'notifications' : this.subtype;
     let apiPath = "";
-    if (this.subtype === 'home') {
+    if (mode === 'home') {
       apiPath = "/api/v1/timelines/home";
-    } else if (this.subtype === 'local') {
+    } else if (mode === 'local') {
       apiPath = "/api/v1/timelines/public?local=true";
-    } else if (this.subtype === 'user') {
+    } else if (mode === 'user') {
       // Need ID. Fetch verify_credentials first.
       const verifyUrl = new URL("/api/v1/accounts/verify_credentials", server);
       const verifyRes = await fetch(verifyUrl, {
@@ -127,6 +131,11 @@ export class MastoService extends Service {
       if (!verifyRes.ok) return verifyRes;
       const me = await verifyRes.json();
       apiPath = `/api/v1/accounts/${me.id}/statuses`;
+    } else if (mode === 'notifications') {
+      if (this.type !== 'notifications') {
+        return renderError(400, "Invalid Request Path", this.requestURL.pathname);
+      }
+      apiPath = "/api/v1/notifications";
     } else {
       return renderError(400, "Invalid status type", this.requestURL.pathname);
     }
@@ -169,7 +178,12 @@ export class MastoService extends Service {
       allStatuses = allStatuses.slice(0, 100);
     }
 
-    const rss = this.convertJSONtoRSS(allStatuses, this.subtype, authKey, server);
+    let rss = "";
+    if (mode === 'notifications') {
+      rss = this.convertNotificationsJSONtoRSS(allStatuses, authKey, server);
+    } else {
+      rss = this.convertJSONtoRSS(allStatuses, mode, authKey, server);
+    }
     const encodedRSS = new TextEncoder().encode(rss);
 
     return new Response(encodedRSS, {
@@ -179,6 +193,119 @@ export class MastoService extends Service {
         "Cache-Control": "public, max-age=600"
       }
     });
+  }
+
+  convertNotificationsJSONtoRSS(json, authKey, serverUrl) {
+    if (!Array.isArray(json)) return "";
+
+    const builder = new XMLBuilder({
+      ignoreAttributes: false,
+      attributeNamePrefix: "@_",
+      format: true,
+      suppressBooleanAttributes: false,
+      suppressEmptyNode: true,
+      cdataPropName: "__cdata"
+    });
+
+    const hostname = new URL(serverUrl).hostname;
+
+    const items = json.map(notif => {
+      const type = notif.type;
+      const account = notif.account;
+      const status = notif.status;
+      const name = account.display_name || account.username;
+      
+      let title = "";
+      let html = "";
+      let url = status?.url || account.url;
+
+      // Build Triggerer Signature
+      let proxiedAvatar = "";
+      try {
+        proxiedAvatar = Codec.encode(new URL(account.avatar), Option.image, this.baseURL, authKey).toString();
+      } catch (e) {
+        proxiedAvatar = account.avatar;
+      }
+      const triggererSignature = `
+        <div>
+          <strong>${this.formatAccountName(account, hostname)}</strong><br>
+          <p><img src="${proxiedAvatar}" width="96" height="96" alt="${name}" style="border-radius: 4px;"></p>
+        </div>
+      `;
+
+      if (status) {
+        html = `<div>${triggererSignature}<hr>${this.formatStatusContent(status, authKey, hostname)}</div>`;
+      } else {
+        html = `<div>${triggererSignature}</div>`;
+      }
+
+      switch (type) {
+        case 'mention':
+          title = `💬 Mention from ${name}`;
+          break;
+        case 'reblog':
+          title = `🔁 Boosted by ${name}`;
+          break;
+        case 'favourite':
+          title = `⭐ Favorited by ${name}`;
+          break;
+        case 'follow':
+          title = `👤 Followed by ${name}`;
+          break;
+        case 'follow_request':
+          title = `🔒 Follow request from ${name}`;
+          break;
+        case 'poll':
+          title = `🗳️ Poll finished: ${status?.content?.substring(0, 30)}...`;
+          break;
+        case 'status':
+          title = `🔔 Post from ${name}`;
+          break;
+        case 'update':
+          title = `📝 Post edited by ${name}`;
+          break;
+        default:
+          title = `🔔 ${type} from ${name}`;
+      }
+
+      return {
+        title: title,
+        link: this.wrapBrutaldon(url),
+        guid: {
+          "@_isPermaLink": "true",
+          "#text": `${notif.id}-${type}`
+        },
+        pubDate: new Date(notif.created_at).toUTCString(),
+        description: { "__cdata": html },
+        "dc:creator": this.formatAccountName(account, hostname),
+        "dc:language": status?.language || "en"
+      };
+    });
+
+    const instanceName = new URL(serverUrl).hostname;
+    const channelTitle = `${instanceName} - Notifications`;
+    const rssObj = {
+      "?xml": { "@_version": "1.0", "@_encoding": "UTF-8" },
+      rss: {
+        "@_version": "2.0",
+        "@_xmlns:content": "http://purl.org/rss/1.0/modules/content/",
+        "@_xmlns:dc": "http://purl.org/dc/elements/1.1/",
+        "@_xmlns:atom": "http://www.w3.org/2005/Atom",
+        "@_xmlns:sy": "http://purl.org/rss/1.0/modules/syndication/",
+        channel: {
+          title: channelTitle,
+          link: serverUrl,
+          description: "RSS-THE-PLANET Mastodon Feed",
+          "sy:updatePeriod": "hourly",
+          "sy:updateFrequency": "1",
+          language: "en-us",
+          generator: "RSS-THE-PLANET",
+          item: items
+        }
+      }
+    };
+
+    return builder.build(rssObj);
   }
 
   convertJSONtoRSS(json, subtype, authKey, serverUrl) {
@@ -200,83 +327,19 @@ export class MastoService extends Service {
       const data = isBoost ? status.reblog : status;
       const isReply = data.in_reply_to_id;
       const author = data.account;
-      const name = author.display_name || author.username;
-      
-      // 1. Proxy the avatar
-      let proxiedAvatar = "";
-      try {
-        proxiedAvatar = Codec.encode(new URL(author.avatar), Option.image, this.baseURL, authKey).toString();
-      } catch (e) {
-        proxiedAvatar = author.avatar;
-      }
 
-      // 2. Build RSS Content
-      let html = `<div>`;
+      // 1. Build RSS Content
+      const html = this.formatStatusContent(data, authKey, hostname);
 
-      if (isBoost) {
-        const booster = status.account;
-        html += `<p><small>🚀 by ${this.formatAccountName(booster, hostname)}</small></p>`;
-      } 
-      
-      if (isReply) {
-        const replyToAccount = data.mentions?.find(m => m.id === data.in_reply_to_account_id) || (data.in_reply_to_account_id === author.id ? author : null);
-        const target = replyToAccount ? this.formatAccountName(replyToAccount, hostname) : "Post";
-        html += `<p><small>↩️ to ${target}</small></p>`;
-      }
-
-      // Add the actual post content
-      html += `<div>${data.content}</div>`;
-
-      // 3. Handle Media Attachments
-      if (data.media_attachments && data.media_attachments.length > 0) {
-        html += '<div class="media">';
-        data.media_attachments.forEach(media => {
-          try {
-            const altText = media.description || '';
-            if (media.type === 'image') {
-              const proxiedMedia = Codec.encode(new URL(media.url), Option.image, this.baseURL, authKey).toString();
-              html += `<p><img src="${proxiedMedia}" alt="${altText}"></p>`;
-            } else if (media.type === 'video' || media.type === 'gifv') {
-              const proxiedVideo = Codec.encode(new URL(media.url), Option.asset, this.baseURL, authKey).toString();
-              let posterAttr = "";
-              if (media.preview_url) {
-                const proxiedPoster = Codec.encode(new URL(media.preview_url), Option.image, this.baseURL, authKey).toString();
-                posterAttr = `poster="${proxiedPoster}"`;
-              }
-              html += `<p><video controls playsinline loop ${posterAttr} src="${proxiedVideo}"></video></p>`;
-            } else {
-              // audio, unknown
-              const proxiedLink = Codec.encode(new URL(media.url), Option.auto, this.baseURL, authKey).toString();
-              const linkTitle = altText ? `View ${media.type}: ${altText}` : `View ${media.type} attachment`;
-              html += `<p><a href="${proxiedLink}">${linkTitle}</a></p>`;
-            }
-          } catch (e) {
-            console.error(`[MastoService.convertJSONtoRSS] Media Error: ${e.message} url: ${media.url}`);
-            html += `<p><a href="${media.url}">View ${media.type} attachment</a></p>`;
-          }
-        });
-        html += '</div>';
-      }
-
-      html += `
-        <p>
-          ↩️ ${data.replies_count || 0}・🔁 ${data.reblogs_count || 0}・⭐ ${data.favourites_count || 0}
-        </p>
-        <hr>
-        <div>
-          <strong>${this.formatAccountName(author, hostname)}</strong><br>
-          <p><img src="${proxiedAvatar}" width="96" height="96" alt="${name}" style="border-radius: 4px;"></p>
-        </div>
-      </div>`;
-
-      // 4. Generate a clean type-based title
+      // 2. Generate a clean type-based title
       let displayTitle = "";
       if (isReply) {
         const replyToAccount = data.mentions?.find(m => m.id === data.in_reply_to_account_id) || (data.in_reply_to_account_id === author.id ? author : null);
-        const target = replyToAccount ? this.formatAccountName(replyToAccount, hostname) : "Post";
+        const target = replyToAccount ? (replyToAccount.display_name || replyToAccount.username) : "Post";
         displayTitle = `↩️ to ${target}`;
       } else if (isBoost) {
-        displayTitle = `🚀 of ${this.formatAccountName(author, hostname)}`;
+        const booster = status.account;
+        displayTitle = `🚀 by ${booster.display_name || booster.username}`;
       } else {
         const types = [];
         const text = data.content?.replace(/<[^>]*>/g, '').trim() || "";
@@ -284,7 +347,7 @@ export class MastoService extends Service {
         
         const hasImages = data.media_attachments?.some(m => m.type === 'image');
         const hasVideos = data.media_attachments?.some(m => m.type === 'video' || m.type === 'gifv');
-        if (hasImages) types.push("📸");
+        if (hasImages) types.push("📷");
         if (hasVideos) types.push("📹");
 
         const linkCount = (data.content?.match(/<a /g) || []).length;
@@ -294,7 +357,8 @@ export class MastoService extends Service {
           types.push("🔗");
         }
 
-        displayTitle = types.join("・") || "💬 Status";
+        const emojiTitle = types.join("・") || "💬";
+        displayTitle = `${emojiTitle} from ${author.display_name || author.username}`;
       }
 
       return {
@@ -306,7 +370,8 @@ export class MastoService extends Service {
         },
         pubDate: new Date(data.created_at).toUTCString(),
         description: { "__cdata": html },
-        "dc:creator": this.formatAccountName(author, hostname)
+        "dc:creator": this.formatAccountName(author, hostname),
+        "dc:language": data.language || "en"
       };
     });
 
@@ -319,18 +384,16 @@ export class MastoService extends Service {
         "@_xmlns:content": "http://purl.org/rss/1.0/modules/content/",
         "@_xmlns:dc": "http://purl.org/dc/elements/1.1/",
         "@_xmlns:atom": "http://www.w3.org/2005/Atom",
+        "@_xmlns:sy": "http://purl.org/rss/1.0/modules/syndication/",
         channel: {
           title: channelTitle,
-          link: this.requestURL.origin,
-          "atom:link": {
-            "@_href": this.requestURL.href,
-            "@_rel": "self",
-            "@_type": "application/rss+xml"
-          },
-          description: `RSS THE PLANET: Mastodon ${subtype} feed`,
+          link: serverUrl,
+          description: "RSS-THE-PLANET Mastodon Feed",
+          "sy:updatePeriod": "hourly",
+          "sy:updateFrequency": "1",
           language: "en-us",
           lastBuildDate: new Date().toUTCString(),
-          generator: "RSS THE PLANET MastoService",
+          generator: "RSS-THE-PLANET",
           item: items
         }
       }
@@ -398,6 +461,69 @@ export class MastoService extends Service {
     return `https://brutaldon.org/search_results?q=${encodeURIComponent(url)}`;
   }
 
+  formatStatusContent(data, authKey, hostname) {
+    const author = data.account;
+    const name = author.display_name || author.username;
+    
+    // 1. Proxy the avatar
+    let proxiedAvatar = "";
+    try {
+      proxiedAvatar = Codec.encode(new URL(author.avatar), Option.image, this.baseURL, authKey).toString();
+    } catch (e) {
+      proxiedAvatar = author.avatar;
+    }
+
+    // 2. Build RSS Content
+    let html = `<div>`;
+
+    // Add the actual post content
+    html += `<div>${data.content}</div>`;
+
+    // 3. Handle Media Attachments
+    if (data.media_attachments && data.media_attachments.length > 0) {
+      html += '<div class="media">';
+      data.media_attachments.forEach(media => {
+        try {
+          const altText = media.description || '';
+          if (media.type === 'image') {
+            const proxiedMedia = Codec.encode(new URL(media.url), Option.image, this.baseURL, authKey).toString();
+            html += `<p><img src="${proxiedMedia}" alt="${altText}"></p>`;
+          } else if (media.type === 'video' || media.type === 'gifv') {
+            const proxiedVideo = Codec.encode(new URL(media.url), Option.asset, this.baseURL, authKey).toString();
+            let posterAttr = "";
+            if (media.preview_url) {
+              const proxiedPoster = Codec.encode(new URL(media.preview_url), Option.image, this.baseURL, authKey).toString();
+              posterAttr = `poster="${proxiedPoster}"`;
+            }
+            html += `<p><video controls playsinline loop ${posterAttr} src="${proxiedVideo}"></video></p>`;
+          } else {
+            // audio, unknown
+            const proxiedLink = Codec.encode(new URL(media.url), Option.auto, this.baseURL, authKey).toString();
+            const linkTitle = altText ? `View ${media.type}: ${altText}` : `View ${media.type} attachment`;
+            html += `<p><a href="${proxiedLink}">${linkTitle}</a></p>`;
+          }
+        } catch (e) {
+          console.error(`[MastoService.formatStatusContent] Media Error: ${e.message} url: ${media.url}`);
+          html += `<p><a href="${media.url}">View ${media.type} attachment</a></p>`;
+        }
+      });
+      html += '</div>';
+    }
+
+    html += `
+        <p>
+          ↩️ ${data.replies_count || 0}・🔁 ${data.reblogs_count || 0}・⭐ ${data.favourites_count || 0}
+        </p>
+        <hr>
+        <div>
+          <strong>${this.formatAccountName(author, hostname)}</strong><br>
+          <p><img src="${proxiedAvatar}" width="96" height="96" alt="${name}" style="border-radius: 4px;"></p>
+        </div>
+      </div>`;
+    
+    return html;
+  }
+
   async getSubmitForm(authKey, kvs) {
     const key = this.requestURL.searchParams.get('key') || '';
     const actionUrl = Endpoint.masto + (key ? `?key=${key}` : '');
@@ -448,6 +574,9 @@ export class MastoService extends Service {
               <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/status/user?key=${authKey}" 
                  class="download-link action-link" 
                  target="_blank">User</a>
+              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/notifications?key=${authKey}" 
+                 class="download-link action-link" 
+                 target="_blank">Notifications</a>
               <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/delete?key=${authKey}" 
                  class="download-link action-link delete" 
                  onclick="return confirm('Are you sure you want to delete ${f.name}?');">Delete</a>

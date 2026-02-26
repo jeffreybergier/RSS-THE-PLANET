@@ -117,7 +117,7 @@ function analyzeIssues(xmlResponse) {
     if (!response) return [];
     const errors = [].concat(response.errors?.errorlist?.error || []);
     const warnings = [].concat(response.warnings?.warninglist?.warning || []);
-    const knownFailures = ['SelfDoesntMatchLocation', 'ContainsHTML', 'ContainsUndeclaredHTML', 'NotHtml', 'UnexpectedWhitespace'];
+    const knownFailures = ['SelfDoesntMatchLocation', 'ContainsHTML', 'ContainsUndeclaredHTML', 'NotHtml', 'UnexpectedWhitespace', 'MissingAtomSelfLink'];
     return [...errors, ...warnings]
       .map(issue => {
         const type = issue.type || 'Unknown';

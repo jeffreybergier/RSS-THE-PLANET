@@ -106,7 +106,8 @@ describe('Masto Service Integration', () => {
             avatar: 'https://mastodon.test/avatar.png',
             url: 'https://mastodon.test/@user'
           },
-          media_attachments: []
+          media_attachments: [],
+          language: "en"
         }]), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }
@@ -127,6 +128,14 @@ describe('Masto Service Integration', () => {
       const xml = await response.text();
       expect(xml).toContain('<rss');
       expect(xml).toContain('<channel>');
+      expect(xml).toContain('<title>mastodon.test - Home</title>');
+      expect(xml).toContain('<link>https://mastodon.test</link>');
+      expect(xml).toContain('<description>RSS-THE-PLANET Mastodon Feed</description>');
+      expect(xml).toContain('<sy:updatePeriod>hourly</sy:updatePeriod>');
+      expect(xml).toContain('<sy:updateFrequency>1</sy:updateFrequency>');
+      expect(xml).toContain('<generator>RSS-THE-PLANET</generator>');
+      expect(xml).not.toContain('<atom:link');
+      expect(xml).toContain('<dc:language>en</dc:language>');
       expect(xml).toContain('test post');
       // Verify avatar is present (proxied) and has the correct size
       // Base64 of encodeURIComponent('https://mastodon.test/avatar.png')
@@ -226,19 +235,17 @@ describe('Masto Service Integration', () => {
 
       const res2 = await Router.route(normalStatusRequest, env, ctx);
       const xml2 = await res2.text();
-      expect(xml2).toContain('<title>💬</title>');
+      expect(xml2).toContain('<title>💬 from User</title>');
       globalThis.fetch = originalFetch2;
       
       // Check Boost
-      expect(xml).toContain('<title>🚀 of Original Author (original@mastodon.test)</title>');
-      expect(xml).toContain('<small>🚀 by The Booster (booster@mastodon.test)</small>');
+      expect(xml).toContain('<title>🚀 by The Booster</title>');
       expect(xml).toContain('<dc:creator>Original Author (original@mastodon.test)</dc:creator>');
       expect(xml).toContain('<strong>Original Author (original@mastodon.test)</strong><br>');
       expect(xml).toContain('boosted content');
 
       // Check Reply
-      expect(xml).toContain('<title>↩️ to original (original@mastodon.test)</title>');
-      expect(xml).toContain('<small>↩️ to original (original@mastodon.test)</small>');
+      expect(xml).toContain('<title>↩️ to original</title>');
       expect(xml).toContain('<dc:creator>The Replier (replier@mastodon.test)</dc:creator>');
       expect(xml).toContain('<strong>The Replier (replier@mastodon.test)</strong><br>');
       expect(xml).toContain('reply content');
@@ -263,7 +270,7 @@ describe('Masto Service Integration', () => {
 
       const res3 = await Router.route(complexStatusRequest, env, ctx);
       const xml3 = await res3.text();
-      expect(xml3).toContain('<title>💬・📸・📹・🔗</title>');
+      expect(xml3).toContain('<title>💬・📷・📹・🔗 from User</title>');
       globalThis.fetch = originalFetch3;
 
       // Check Thread Status (Self-Reply)
@@ -282,14 +289,110 @@ describe('Masto Service Integration', () => {
 
       const res4 = await Router.route(threadStatusRequest, env, ctx);
       const xml4 = await res4.text();
-      expect(xml4).toContain('<title>↩️ to Author Name (author@mastodon.test)</title>');
-      expect(xml4).toContain('<small>↩️ to Author Name (author@mastodon.test)</small>');
+      expect(xml4).toContain('<title>↩️ to Author Name</title>');
       globalThis.fetch = originalFetch4;
 
       // Check Brutaldon URL rewriting (Item link only)
       expect(xml).toContain('link>https://brutaldon.org/search_results?q=https%3A%2F%2Fmastodon.test%2F%40original%2F10</link>');
       // HTML content should remain original
       expect(xml).toContain('href="https://mastodon.test/@mentioned"');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('should generate an RSS feed for notifications', async () => {
+    // 1. Save an entry
+    const formData = new FormData();
+    formData.append('server', 'https://mastodon.test');
+    formData.append('apiKey', 'test-token');
+    const saveRequest = new Request('http://example.com/masto/?key=test-key', {
+      method: 'POST',
+      body: formData
+    });
+    await Router.route(saveRequest, env, ctx);
+    
+    saveRequest.env = env;
+    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(saveRequest));
+    const entries = await kvs.list();
+    const entry = entries.find(e => e.name === 'https://mastodon.test');
+    const id = entry.key;
+
+    // 2. Mock fetch for the notifications call
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      if (url.toString().includes('/api/v1/notifications')) {
+        return new Response(JSON.stringify([
+          {
+            id: '100',
+            type: 'mention',
+            created_at: new Date().toISOString(),
+            account: { username: 'user1', acct: 'user1', display_name: 'User One', avatar: 'https://mastodon.test/avatar1.png' },
+            status: { 
+              content: '<p>Hello there!</p>', 
+              url: 'https://mastodon.test/@user1/1',
+              account: { username: 'original_author', acct: 'original_author', display_name: 'Original Author', avatar: 'https://mastodon.test/avatar_oa.png' }
+            }
+          },
+          {
+            id: '101',
+            type: 'favourite',
+            created_at: new Date().toISOString(),
+            account: { username: 'user2', acct: 'user2', display_name: 'User Two', avatar: 'https://mastodon.test/avatar2.png' },
+            status: { 
+              content: '<p>Original post content</p>', 
+              url: 'https://mastodon.test/@me/10',
+              account: { username: 'me', acct: 'me', display_name: 'Me', avatar: 'https://mastodon.test/avatar_me.png' }
+            }
+          },
+          {
+            id: '102',
+            type: 'follow',
+            created_at: new Date().toISOString(),
+            account: { username: 'user3', acct: 'user3', display_name: 'User Three', avatar: 'https://mastodon.test/avatar3.png', url: 'https://mastodon.test/@user3' }
+          },
+          {
+            id: '103',
+            type: 'reblog',
+            created_at: new Date().toISOString(),
+            account: { username: 'user4', acct: 'user4', display_name: 'User Four', avatar: 'https://mastodon.test/avatar4.png' },
+            status: { 
+              content: '<p>Boosted post</p>', 
+              url: 'https://mastodon.test/@user4/4',
+              account: { username: 'author4', acct: 'author4', display_name: 'Author Four', avatar: 'https://mastodon.test/avatar4.png' }
+            }
+          },
+          {
+            id: '104',
+            type: 'poll',
+            created_at: new Date().toISOString(),
+            account: { username: 'user5', acct: 'user5', display_name: 'User Five', avatar: 'https://mastodon.test/avatar5.png' },
+            status: { 
+              content: '<p>Poll results are in!</p>', 
+              url: 'https://mastodon.test/@user5/5',
+              account: { username: 'user5', acct: 'user5', display_name: 'User Five', avatar: 'https://mastodon.test/avatar5.png' }
+            }
+          }
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(null, { status: 404 });
+    };
+
+    try {
+      const notifRequest = new Request(`http://example.com/masto/${id}/notifications?key=test-key`);
+      const response = await Router.route(notifRequest, env, ctx);
+      expect(response.status).toBe(200);
+      const xml = await response.text();
+      
+      expect(xml).toContain('<title>mastodon.test - Notifications</title>');
+      expect(xml).toContain('<title>💬 Mention from User One</title>');
+      expect(xml).toContain('<title>⭐ Favorited by User Two</title>');
+      expect(xml).toContain('<title>👤 Followed by User Three</title>');
+      expect(xml).toContain('<title>🔁 Boosted by User Four</title>');
+      expect(xml).toContain('<title>🗳️ Poll finished: &lt;p&gt;Poll results are in!&lt;/p&gt;...</title>');
+      expect(xml).toContain('Hello there!');
+      expect(xml).toContain('Boosted post');
+      expect(xml).toContain('Poll results are in!');
     } finally {
       globalThis.fetch = originalFetch;
     }
