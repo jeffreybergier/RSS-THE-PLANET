@@ -284,7 +284,7 @@ export class MastoService extends Service {
         
         const hasImages = data.media_attachments?.some(m => m.type === 'image');
         const hasVideos = data.media_attachments?.some(m => m.type === 'video' || m.type === 'gifv');
-        if (hasImages) types.push("📸");
+        if (hasImages) types.push("📷");
         if (hasVideos) types.push("📹");
 
         const linkCount = (data.content?.match(/<a /g) || []).length;

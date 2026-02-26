@@ -263,7 +263,7 @@ describe('Masto Service Integration', () => {
 
       const res3 = await Router.route(complexStatusRequest, env, ctx);
       const xml3 = await res3.text();
-      expect(xml3).toContain('<title>💬・📸・📹・🔗</title>');
+      expect(xml3).toContain('<title>💬・📷・📹・🔗</title>');
       globalThis.fetch = originalFetch3;
 
       // Check Thread Status (Self-Reply)
