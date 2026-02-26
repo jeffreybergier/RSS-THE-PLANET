@@ -300,4 +300,68 @@ describe('Masto Service Integration', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it('should generate an RSS feed for notifications', async () => {
+    // 1. Save an entry
+    const formData = new FormData();
+    formData.append('server', 'https://mastodon.test');
+    formData.append('apiKey', 'test-token');
+    const saveRequest = new Request('http://example.com/masto/?key=test-key', {
+      method: 'POST',
+      body: formData
+    });
+    await Router.route(saveRequest, env, ctx);
+    
+    saveRequest.env = env;
+    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(saveRequest));
+    const entries = await kvs.list();
+    const entry = entries.find(e => e.name === 'https://mastodon.test');
+    const id = entry.key;
+
+    // 2. Mock fetch for the notifications call
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      if (url.toString().includes('/api/v1/notifications')) {
+        return new Response(JSON.stringify([
+          {
+            id: '100',
+            type: 'mention',
+            created_at: new Date().toISOString(),
+            account: { username: 'user1', acct: 'user1', display_name: 'User One', avatar: 'https://mastodon.test/avatar1.png' },
+            status: { content: '<p>Hello there!</p>', url: 'https://mastodon.test/@user1/1' }
+          },
+          {
+            id: '101',
+            type: 'favourite',
+            created_at: new Date().toISOString(),
+            account: { username: 'user2', acct: 'user2', display_name: 'User Two', avatar: 'https://mastodon.test/avatar2.png' },
+            status: { content: '<p>Original post content</p>', url: 'https://mastodon.test/@me/10' }
+          },
+          {
+            id: '102',
+            type: 'follow',
+            created_at: new Date().toISOString(),
+            account: { username: 'user3', acct: 'user3', display_name: 'User Three', avatar: 'https://mastodon.test/avatar3.png', url: 'https://mastodon.test/@user3' }
+          }
+        ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(null, { status: 404 });
+    };
+
+    try {
+      const notifRequest = new Request(`http://example.com/masto/${id}/notifications?key=test-key`);
+      const response = await Router.route(notifRequest, env, ctx);
+      expect(response.status).toBe(200);
+      const xml = await response.text();
+      
+      expect(xml).toContain('<title>mastodon.test - Notifications</title>');
+      expect(xml).toContain('<title>💬 Mention from User One</title>');
+      expect(xml).toContain('<title>⭐ Favorited by User Two</title>');
+      expect(xml).toContain('<title>👤 Followed by User Three</title>');
+      expect(xml).toContain('Hello there!');
+      expect(xml).toContain('User Three followed you.');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });

@@ -60,6 +60,9 @@ export class MastoService extends Service {
       if (type === 'status') {
         return await this.handleStatus(authKey, kvs);
       }
+      if (type === 'notifications') {
+        return await this.handleStatus(authKey, kvs);
+      }
 
       return await this.getSubmitForm(authKey, kvs);
     } catch (error) {
@@ -96,7 +99,7 @@ export class MastoService extends Service {
     if (!authKey || !kvs) {
       return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
     }
-    if (!this.uuid || !this.subtype) {
+    if (!this.uuid || (!this.subtype && this.type !== 'notifications')) {
       return renderError(400, "Invalid Request", this.requestURL.pathname);
     }
 
@@ -113,12 +116,13 @@ export class MastoService extends Service {
       return renderError(500, "Could not decrypt credentials. Please re-save them.", this.requestURL.pathname);
     }
 
+    const mode = this.type === 'notifications' ? 'notifications' : this.subtype;
     let apiPath = "";
-    if (this.subtype === 'home') {
+    if (mode === 'home') {
       apiPath = "/api/v1/timelines/home";
-    } else if (this.subtype === 'local') {
+    } else if (mode === 'local') {
       apiPath = "/api/v1/timelines/public?local=true";
-    } else if (this.subtype === 'user') {
+    } else if (mode === 'user') {
       // Need ID. Fetch verify_credentials first.
       const verifyUrl = new URL("/api/v1/accounts/verify_credentials", server);
       const verifyRes = await fetch(verifyUrl, {
@@ -127,6 +131,11 @@ export class MastoService extends Service {
       if (!verifyRes.ok) return verifyRes;
       const me = await verifyRes.json();
       apiPath = `/api/v1/accounts/${me.id}/statuses`;
+    } else if (mode === 'notifications') {
+      if (this.type !== 'notifications') {
+        return renderError(400, "Invalid Request Path", this.requestURL.pathname);
+      }
+      apiPath = "/api/v1/notifications";
     } else {
       return renderError(400, "Invalid status type", this.requestURL.pathname);
     }
@@ -169,7 +178,12 @@ export class MastoService extends Service {
       allStatuses = allStatuses.slice(0, 100);
     }
 
-    const rss = this.convertJSONtoRSS(allStatuses, this.subtype, authKey, server);
+    let rss = "";
+    if (mode === 'notifications') {
+      rss = this.convertNotificationsJSONtoRSS(allStatuses, authKey, server);
+    } else {
+      rss = this.convertJSONtoRSS(allStatuses, mode, authKey, server);
+    }
     const encodedRSS = new TextEncoder().encode(rss);
 
     return new Response(encodedRSS, {
@@ -179,6 +193,124 @@ export class MastoService extends Service {
         "Cache-Control": "public, max-age=600"
       }
     });
+  }
+
+  convertNotificationsJSONtoRSS(json, authKey, serverUrl) {
+    if (!Array.isArray(json)) return "";
+
+    const builder = new XMLBuilder({
+      ignoreAttributes: false,
+      attributeNamePrefix: "@_",
+      format: true,
+      suppressBooleanAttributes: false,
+      suppressEmptyNode: true,
+      cdataPropName: "__cdata"
+    });
+
+    const hostname = new URL(serverUrl).hostname;
+
+    const items = json.map(notif => {
+      const type = notif.type;
+      const account = notif.account;
+      const status = notif.status;
+      const name = account.display_name || account.username;
+      
+      let title = "";
+      let html = "<div>";
+      let url = status?.url || account.url;
+
+      // Proxy account avatar
+      let proxiedAvatar = "";
+      try {
+        proxiedAvatar = Codec.encode(new URL(account.avatar), Option.image, this.baseURL, authKey).toString();
+      } catch (e) {
+        proxiedAvatar = account.avatar;
+      }
+
+      switch (type) {
+        case 'mention':
+          title = `💬 Mention from ${name}`;
+          html += `<div>${status?.content || ""}</div>`;
+          break;
+        case 'reblog':
+          title = `🔁 Boosted by ${name}`;
+          html += `<div>${status?.content || ""}</div>`;
+          break;
+        case 'favourite':
+          title = `⭐ Favorited by ${name}`;
+          html += `<div>${status?.content || ""}</div>`;
+          break;
+        case 'follow':
+          title = `👤 Followed by ${name}`;
+          html += `<p>${name} followed you.</p>`;
+          break;
+        case 'follow_request':
+          title = `🔒 Follow request from ${name}`;
+          html += `<p>${name} wants to follow you.</p>`;
+          break;
+        case 'poll':
+          title = `🗳️ Poll finished: ${status?.content?.substring(0, 30)}...`;
+          html += `<div>${status?.content || ""}</div>`;
+          break;
+        case 'status':
+          title = `🔔 Post from ${name}`;
+          html += `<div>${status?.content || ""}</div>`;
+          break;
+        case 'update':
+          title = `📝 Post edited by ${name}`;
+          html += `<div>${status?.content || ""}</div>`;
+          break;
+        default:
+          title = `🔔 ${type} from ${name}`;
+          html += `<p>Notification type: ${type}</p>`;
+      }
+
+      html += `
+        <hr>
+        <div>
+          <strong>${this.formatAccountName(account, hostname)}</strong><br>
+          <p><img src="${proxiedAvatar}" width="96" height="96" alt="${name}" style="border-radius: 4px;"></p>
+        </div>
+      </div>`;
+
+      return {
+        title: title,
+        link: this.wrapBrutaldon(url),
+        guid: {
+          "@_isPermaLink": "true",
+          "#text": `${notif.id}-${type}`
+        },
+        pubDate: new Date(notif.created_at).toUTCString(),
+        description: { "__cdata": html },
+        "dc:creator": this.formatAccountName(account, hostname),
+        "dc:language": status?.language || "en"
+      };
+    });
+
+    const instanceName = new URL(serverUrl).hostname;
+    const channelTitle = `${instanceName} - Notifications`;
+    const rssObj = {
+      "?xml": { "@_version": "1.0", "@_encoding": "UTF-8" },
+      rss: {
+        "@_version": "2.0",
+        "@_xmlns:content": "http://purl.org/rss/1.0/modules/content/",
+        "@_xmlns:dc": "http://purl.org/dc/elements/1.1/",
+        "@_xmlns:atom": "http://www.w3.org/2005/Atom",
+        "@_xmlns:sy": "http://purl.org/rss/1.0/modules/syndication/",
+        channel: {
+          title: channelTitle,
+          link: serverUrl,
+          description: "RSS-THE-PLANET Mastodon Feed",
+          "sy:updatePeriod": "hourly",
+          "sy:updateFrequency": "1",
+          language: "en-us",
+          generator: "RSS-THE-PLANET",
+          item: items
+        }
+      }
+    };
+
+    return builder.build(rssObj);
   }
 
   convertJSONtoRSS(json, subtype, authKey, serverUrl) {
@@ -438,6 +570,9 @@ export class MastoService extends Service {
               <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/status/user?key=${authKey}" 
                  class="download-link action-link" 
                  target="_blank">User</a>
+              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/notifications?key=${authKey}" 
+                 class="download-link action-link" 
+                 target="_blank">Notifications</a>
               <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/delete?key=${authKey}" 
                  class="download-link action-link delete" 
                  onclick="return confirm('Are you sure you want to delete ${f.name}?');">Delete</a>
