@@ -1,5 +1,7 @@
 import { Service, Endpoint } from './service.js';
 import { Auth } from '../lib/auth.js';
+import { Codec } from '../lib/codec.js';
+import { Option } from '../lib/option.js';
 import { renderError } from '../ui/error.js';
 import { renderLayout } from '../ui/theme.js';
 import { KVSAdapter, KVSValue } from '../adapt/kvs.js';
@@ -18,6 +20,7 @@ export class YouTubeService extends Service {
   constructor(request, env, ctx) {
     super(request, env, ctx);
     this.requestURL = new URL(request.url);
+    this.baseURL = new URL(Endpoint.proxy, this.requestURL.origin);
     this.authKey = null;
     this.kvs = null;
 
@@ -35,6 +38,7 @@ export class YouTubeService extends Service {
       this.uuid = path[idx + 1];
       this.action = path[idx + 2] || null;
       this.playlistId = path[idx + 3] || null;
+      this.feedAction = path[idx + 4] || null;
     }
   }
 
@@ -57,7 +61,9 @@ export class YouTubeService extends Service {
     if (this.action === 'auth') return this.redirectToGoogle();
     if (this.action === 'delete') return await this.handleDelete();
     if (this.action === 'playlists') return await this.viewPlaylists();
-    if (this.action === 'playlist' && this.playlistId) return await this.getPlaylistRSS();
+    if (this.action === 'playlist' && this.playlistId && this.feedAction === 'feed') {
+      return await this.getPlaylistRSS();
+    }
     return await this.getSubmitForm();
   }
 
@@ -146,16 +152,41 @@ export class YouTubeService extends Service {
   }
 
   async getPlaylistRSS() {
-    const token = await this.getValidToken();
-    if (token instanceof Response) return token;
+    if (!this.authKey || !this.kvs) return renderError(401, 'Unauthorized', this.requestURL.pathname);
+    const entry = await this.kvs.get(this.uuid);
+    if (!entry) return renderError(404, 'Account not found', this.requestURL.pathname);
+    const data = JSON.parse(entry.value);
+    
     try {
-      const items = await this.fetchPlaylistItems(token, this.playlistId);
-      const rss = this.convertYouTubeToRSS(items);
+      const token = await this.getAccessToken(data.refresh_token);
+      const [pItems, playlistTitle] = await Promise.all([
+        this.fetchPlaylistItems(token, this.playlistId),
+        this.fetchPlaylistTitle(token, this.playlistId)
+      ]);
+      
+      if (pItems.length === 0) return this.renderEmptyRSS();
+      
+      const videoIds = pItems.map(i => i.contentDetails.videoId).join(',');
+      const videos = await this.fetchVideoDetails(token, videoIds);
+      
+      const feedTitle = playlistTitle;
+      const rss = this.convertYouTubeToRSS(videos, feedTitle);
       const encoded = new TextEncoder().encode(rss);
       return new Response(encoded, { headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Content-Length': encoded.byteLength.toString(), 'Cache-Control': 'public, max-age=1800' } });
     } catch (e) {
+      console.error(`[YouTubeService.getPlaylistRSS] error: ${e.message}`);
       return renderError(502, 'Failed to generate feed', this.requestURL.pathname);
     }
+  }
+
+  async fetchPlaylistTitle(accessToken, playlistId) {
+    const url = new URL('https://www.googleapis.com/youtube/v3/playlists');
+    url.searchParams.set('part', 'snippet');
+    url.searchParams.set('id', playlistId);
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+    if (!res.ok) return 'Playlist Feed';
+    const data = await res.json();
+    return data.items?.[0]?.snippet?.title || 'Playlist Feed';
   }
 
   async fetchPlaylistItems(accessToken, playlistId) {
@@ -168,23 +199,63 @@ export class YouTubeService extends Service {
     return (await res.json()).items || [];
   }
 
-  convertYouTubeToRSS(items) {
-    const rssItems = items.map(item => ({
-      title: item.snippet.title,
-      link: `https://www.youtube.com/watch?v=${item.contentDetails.videoId}`,
-      guid: item.contentDetails.videoId,
-      pubDate: new Date(item.snippet.publishedAt).toUTCString(),
-      description: { '__cdata': `<p>${item.snippet.description}</p><p><img src="${item.snippet.thumbnails?.high?.url || ''}"></p>` }
-    }));
+  async fetchVideoDetails(accessToken, videoIds) {
+    const url = new URL('https://www.googleapis.com/youtube/v3/videos');
+    url.searchParams.set('part', 'snippet,statistics,contentDetails');
+    url.searchParams.set('id', videoIds);
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+    if (!res.ok) throw new Error('Video details fetch failed');
+    return (await res.json()).items || [];
+  }
+
+  renderEmptyRSS() {
+    const rss = this.convertYouTubeToRSS([], 'YouTube Playlist Feed');
+    return new Response(rss, { headers: { 'Content-Type': 'text/xml; charset=utf-8' } });
+  }
+
+  convertYouTubeToRSS(videos, feedTitle) {
+    const rssItems = videos.map(v => {
+      const proxiedThumb = this.proxyURL(this.getThumbnailURL(v), Option.image);
+      return {
+        title: v.snippet.title,
+        link: `https://www.youtube.com/watch?v=${v.id}`,
+        guid: { '@_isPermaLink': 'false', '#text': v.id },
+        pubDate: new Date(v.snippet.publishedAt).toUTCString(),
+        description: { '__cdata': UI.renderVideoRSSContent(v, v.statistics, proxiedThumb) },
+        'dc:creator': v.snippet.channelTitle
+      };
+    });
+    return this.buildRSS(rssItems, feedTitle);
+  }
+
+  getThumbnailURL(video) {
+    const t = video.snippet.thumbnails;
+    return t?.maxres?.url || t?.high?.url || '';
+  }
+
+  proxyURL(url, option) {
+    if (!url) return '';
+    try {
+      return Codec.encode(new URL(url), option, this.baseURL, this.authKey).toString();
+    } catch {
+      return url;
+    }
+  }
+
+  buildRSS(items, title) {
     const rssObj = {
       '?xml': { '@_version': '1.0', '@_encoding': 'UTF-8' },
       rss: {
         '@_version': '2.0',
+        '@_xmlns:dc': 'http://purl.org/dc/elements/1.1/',
+        '@_xmlns:content': 'http://purl.org/rss/1.0/modules/content/',
         channel: {
-          title: 'YouTube Playlist Feed',
+          title,
           link: 'https://www.youtube.com',
           description: 'YouTube Playlist converted to RSS by RSS-THE-PLANET',
-          item: rssItems
+          lastBuildDate: new Date().toUTCString(),
+          generator: 'RSS-THE-PLANET',
+          item: items
         }
       }
     };

@@ -55,7 +55,7 @@ export const renderPlaylistTable = (accountKey, playlists, authKey) => {
           <small style="color: #666;">${p.contentDetails.itemCount} videos</small>
         </td>
         <td class="actions">
-          <a href="${Endpoint.youtube}${encodeURIComponent(accountKey)}/playlist/${p.id}?key=${authKey}" 
+          <a href="${Endpoint.youtube}${encodeURIComponent(accountKey)}/playlist/${p.id}/feed?key=${authKey}" 
              class="download-link action-link primary" 
              target="_blank">RSS Feed</a>
         </td>
@@ -66,4 +66,30 @@ export const renderPlaylistTable = (accountKey, playlists, authKey) => {
     { text: 'Playlist' },
     { text: 'Actions', class: 'text-right' }
   ], rows);
+};
+
+const renderThumbnail = (video, proxiedUrl) => {
+  if (!proxiedUrl) return '';
+  const watchUrl = 'https://www.youtube.com/watch?v=' + video.id;
+  return '<p><a href="' + watchUrl + '"><img src="' + proxiedUrl + '" width="640" style="max-width: 100%;"></a></p>';
+};
+
+export const renderVideoRSSContent = (video, stats, proxiedThumb) => {
+  const likes = stats?.likeCount || 0;
+  const comments = stats?.commentCount || 0;
+  const description = (video.snippet.description || '').replace(/\n/g, '<br>');
+  const thumbHtml = renderThumbnail(video, proxiedThumb);
+
+  return `
+    <div class="youtube-rss-item">
+      <p><a href="https://www.youtube.com/watch?v=${video.id}">View on YouTube</a></p>
+      ${thumbHtml}
+      <div class="video-stats" style="margin-bottom: 1rem; font-weight: bold;">
+        👍 ${likes}・💬 ${comments}
+      </div>
+      <div class="video-description">
+        ${description}
+      </div>
+    </div>
+  `;
 };

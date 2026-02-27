@@ -143,6 +143,57 @@ describe('YouTube Service Integration', () => {
     const body = await res.text();
     expect(body).toContain('My Favorites');
     expect(body).toContain('pl1');
+    expect(body).toContain('/playlist/pl1/feed');
+  });
+
+  it('should generate RSS feed for playlist', async () => {
+    Auth.load(env);
+    const kvsMap = env.RSS_THE_PLANET_KVS;
+    kvsMap.set('test-uuid-rss', new KVSValue(
+      'test-uuid-rss', 
+      'test@example.com', 
+      JSON.stringify({ refresh_token: 'mock-refresh' }), 
+      'YOUTUBE', 
+      'test-key'
+    ));
+
+    global.fetch = vi.fn().mockImplementation((url) => {
+      const urlStr = url.toString();
+      if (urlStr === mockConfig.web.token_uri) {
+        return Promise.resolve(new Response(JSON.stringify({ access_token: 'new-access' }), { status: 200 }));
+      }
+      if (urlStr.includes('youtube/v3/playlistItems')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [{ 
+            snippet: { title: 'Video 1', publishedAt: new Date().toISOString(), description: 'Desc 1', channelTitle: 'Chan 1' },
+            contentDetails: { videoId: 'v1' }
+          }]
+        }), { status: 200 }));
+      }
+      if (urlStr.includes('youtube/v3/playlists')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [{ snippet: { title: 'Mock Playlist' } }]
+        }), { status: 200 }));
+      }
+      if (urlStr.includes('youtube/v3/videos')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [{ id: 'v1', snippet: { title: 'Video 1', publishedAt: new Date().toISOString(), description: 'Desc 1', channelTitle: 'Chan 1' }, statistics: { likeCount: '10', commentCount: '5' } }]
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('', { status: 404 }));
+    });
+
+    const req = createRequest(Endpoint.youtube + 'test-uuid-rss/playlist/pl1/feed?key=test-key');
+    const service = new YouTubeService(req, env, {});
+    const res = await service.handleRequest();
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('text/xml');
+    const body = await res.text();
+    expect(body).toContain('<rss');
+    expect(body).toContain('<title>Mock Playlist</title>');
+    expect(body).toContain('Video 1');
+    expect(body).toContain('👍 10');
   });
 
   it('should render the dashboard when authorized', async () => {
