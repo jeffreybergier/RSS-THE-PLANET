@@ -87,7 +87,7 @@ export class MastoService extends Service {
     const apiPath = await this.getAPIPath(mode, entry.name, entry.value);
     if (apiPath instanceof Response) return apiPath;
 
-    const all = await this.fetchStatuses(apiPath, entry.name, entry.value);
+    const all = await this.fetchStatuses(apiPath, entry.name, entry.value, mode);
     if (all instanceof Response) return all;
 
     return this.renderRSSResponse(all, mode, authKey, entry.name);
@@ -95,7 +95,7 @@ export class MastoService extends Service {
 
   validateStatusRequest(authKey, kvs) {
     if (!authKey || !kvs) return renderError(401, 'Unauthorized', this.requestURL.pathname);
-    if (!this.uuid) return renderError(400, 'Invalid Request', this.requestURL.pathname);
+    if (!this.uuid) return renderError(400, 'ID required', this.requestURL.pathname);
     if (!this.subtype && this.type !== 'notifications') return renderError(400, 'Invalid Request', this.requestURL.pathname);
     return null;
   }
@@ -130,9 +130,10 @@ export class MastoService extends Service {
     return `/api/v1/accounts/${me.id}/statuses`;
   }
 
-  async fetchStatuses(apiPath, server, apiKey) {
+  async fetchStatuses(apiPath, server, apiKey, mode) {
     let all = [], maxId = null, attempts = 0;
-    while (all.length < 50 && attempts < 2) {
+    const maxAttempts = (mode === 'home') ? 3 : 1;
+    while (all.length < 100 && attempts < maxAttempts) {
       const url = new URL(apiPath, server);
       if (maxId) url.searchParams.set('max_id', maxId);
       const res = await fetch(url, { headers: { 'Authorization': `Bearer ${apiKey}` } });
