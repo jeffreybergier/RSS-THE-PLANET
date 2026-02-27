@@ -9,10 +9,7 @@ export const renderProxySubmitForm = (key) => `
   <h2>RSS THE PLANET: Proxy</h2>
   <h2>Generate Proxy URL</h2>
   <form action="${Endpoint.proxy}" method="GET">
-    <p>
-      <label for="key">API Key:</label>
-      <input type="text" id="key" name="key" value="${key || ''}" oninput="updateAction()">
-    </p>
+    ${Shared.renderKeyInput(key, Endpoint.proxy)}
     <p>
       <label for="url">Target URL</label>
       <textarea id="url" name="url" cols="60" rows="10" placeholder="https://example.com/feed.xml"></textarea>      

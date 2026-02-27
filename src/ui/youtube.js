@@ -8,6 +8,10 @@ export const renderDashboard = (key, authUrl, tableRows) => `
   <h2>RSS THE PLANET: YouTube</h2>
   <p>Convert your private or public YouTube playlists into RSS feeds.</p>
   
+  <form id="youtube-dashboard-form" action="${Endpoint.youtube}" method="GET">
+    ${Shared.renderKeyInput(key, Endpoint.youtube)}
+  </form>
+
   <div style="margin: 1.5rem 0; padding: 1rem; background: #f8f9fa; border-radius: 8px; border: 1px solid #dadce0; text-align: center;">
     <a href="${authUrl}" style="display: inline-flex; align-items: center; background: white; border: 1px solid #dadce0; padding: 0.5rem 1rem; border-radius: 4px; font-weight: 500; color: #3c4043; text-decoration: none;">
       <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" width="20" height="20" style="margin-right: 10px;">
