@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { YouTubeService } from '../src/serve/youtube.js';
 import { Endpoint } from '../src/serve/service.js';
 import { Auth } from '../src/lib/auth.js';
+import { KVSValue } from '../src/adapt/kvs.js';
 
 describe('YouTube Service Integration', () => {
   const mockConfig = {
@@ -102,17 +103,59 @@ describe('YouTube Service Integration', () => {
     expect(found).toBe(true);
   });
 
+  it('should fetch and display playlists', async () => {
+    Auth.load(env);
+    const kvsMap = env.RSS_THE_PLANET_KVS;
+    kvsMap.set('test-uuid', new KVSValue(
+      'test-uuid', 
+      'test@example.com', 
+      JSON.stringify({ refresh_token: 'mock-refresh' }), 
+      'YOUTUBE', 
+      'test-key'
+    ));
+
+    global.fetch = vi.fn().mockImplementation((url) => {
+      const urlStr = url.toString();
+      if (urlStr === mockConfig.web.token_uri) {
+        return Promise.resolve(new Response(JSON.stringify({
+          access_token: 'new-access'
+        }), { status: 200 }));
+      }
+      if (urlStr.includes('youtube/v3/playlists')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [
+            { 
+              id: 'pl1', 
+              snippet: { title: 'My Favorites' },
+              contentDetails: { itemCount: 10 }
+            }
+          ]
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('', { status: 404 }));
+    });
+
+    const req = createRequest(Endpoint.youtube + 'test-uuid/playlists?key=test-key');
+    const service = new YouTubeService(req, env, {});
+    const res = await service.handleRequest();
+
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('My Favorites');
+    expect(body).toContain('pl1');
+  });
+
   it('should render the dashboard when authorized', async () => {
     Auth.load(env);
     // Seed KVS with an account
     const kvsMap = env.RSS_THE_PLANET_KVS;
-    kvsMap.set('test-uuid', {
-      key: 'test-uuid',
-      name: 'test@example.com',
-      value: JSON.stringify({ refresh_token: 'some-token' }),
-      type: 'YOUTUBE',
-      owner: 'test-key'
-    });
+    kvsMap.set('test-uuid-2', new KVSValue(
+      'test-uuid-2', 
+      'test@example.com', 
+      JSON.stringify({ refresh_token: 'some-token' }), 
+      'YOUTUBE', 
+      'test-key'
+    ));
 
     const req = createRequest(Endpoint.youtube + '?key=test-key');
     const service = new YouTubeService(req, env, {});

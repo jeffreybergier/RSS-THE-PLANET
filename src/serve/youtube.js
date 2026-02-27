@@ -5,6 +5,7 @@ import { renderLayout } from '../ui/theme.js';
 import { KVSAdapter, KVSValue } from '../adapt/kvs.js';
 import * as UI from '../ui/youtube.js';
 import { renderUpdateActionScript } from '../ui/shared.js';
+import { XMLBuilder } from 'fast-xml-parser';
 
 // MARK: YouTubeService Class
 
@@ -20,166 +21,187 @@ export class YouTubeService extends Service {
     this.authKey = null;
     this.kvs = null;
 
-    // Parse path components for /youtube/auth, /youtube/UUID/playlists, or /youtube/UUID/playlist/PLAYLIST_ID
     const path = this.requestURL.pathname.split('/');
     const idx = path.indexOf('youtube');
     if (idx !== -1 && path[idx + 1]) {
-      if (path[idx + 1] === 'auth') {
-        this.action = 'auth';
-      } else {
-        this.uuid = path[idx + 1];
-        this.action = path[idx + 2] || null;
-        this.playlistId = path[idx + 3] || null;
-      }
+      this.parsePath(path, idx);
+    }
+  }
+
+  parsePath(path, idx) {
+    if (path[idx + 1] === 'auth') {
+      this.action = 'auth';
+    } else {
+      this.uuid = path[idx + 1];
+      this.action = path[idx + 2] || null;
+      this.playlistId = path[idx + 3] || null;
     }
   }
 
   async handleRequest() {
     try {
       if (!this.env.YOUTUBE_APP_KEY) {
-        return renderError(503, 'YouTube Service is not configured on this server.', this.requestURL.pathname);
+        return renderError(503, 'YouTube Service is not configured.', this.requestURL.pathname);
       }
-
       this.authKey = await Auth.validate(this.request);
-      if (this.authKey) {
-        this.kvs = new KVSAdapter(this.env, 'YOUTUBE', this.authKey);
-      }
-
-      if (this.requestURL.pathname.startsWith('/callback/')) {
-        return await this.handleCallback();
-      }
-
-      if (this.action === 'auth') return this.redirectToGoogle();
-      if (this.action === 'delete') return await this.handleDelete();
-      if (this.action === 'playlists') return await this.viewPlaylists();
-      if (this.action === 'playlist' && this.playlistId) return await this.getPlaylistRSS();
-
-      return await this.getSubmitForm();
+      if (this.authKey) this.kvs = new KVSAdapter(this.env, 'YOUTUBE', this.authKey);
+      if (this.requestURL.pathname.startsWith('/callback/')) return await this.handleCallback();
+      return await this.dispatchAction();
     } catch (e) {
       console.error(`[YouTubeService.handleRequest] error: ${e.message}`);
       return renderError(500, 'Internal server error', this.requestURL.pathname);
     }
   }
 
+  async dispatchAction() {
+    if (this.action === 'auth') return this.redirectToGoogle();
+    if (this.action === 'delete') return await this.handleDelete();
+    if (this.action === 'playlists') return await this.viewPlaylists();
+    if (this.action === 'playlist' && this.playlistId) return await this.getPlaylistRSS();
+    return await this.getSubmitForm();
+  }
+
   getGoogleConfig() {
     const configStr = this.env.YOUTUBE_APP_KEY;
-    // Note: handleRequest already checks for existence, but we keep this robust
-    if (!configStr) throw new Error('YOUTUBE_APP_KEY not found in environment');
-    const config = JSON.parse(configStr);
-    return config.web;
+    if (!configStr) throw new Error('YOUTUBE_APP_KEY not found');
+    return JSON.parse(configStr).web;
   }
 
   redirectToGoogle() {
     if (!this.authKey) return renderError(401, 'Unauthorized', this.requestURL.pathname);
-    
     const config = this.getGoogleConfig();
     const authUrl = new URL(config.auth_uri);
-    
     authUrl.searchParams.set('client_id', config.client_id);
     authUrl.searchParams.set('redirect_uri', this.getRedirectUri(config));
     authUrl.searchParams.set('response_type', 'code');
-    authUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/userinfo.email');
+    authUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/youtube https://www.googleapis.com/auth/userinfo.email');
     authUrl.searchParams.set('access_type', 'offline');
     authUrl.searchParams.set('prompt', 'consent');
-    // Store authKey in state to verify on callback
     authUrl.searchParams.set('state', this.authKey);
-
     return Response.redirect(authUrl.toString(), 302);
   }
 
   getRedirectUri(config) {
-    // Pick the redirect URI that matches current environment
     const isLocal = this.requestURL.hostname === 'localhost';
     return config.redirect_uris.find(uri => isLocal ? uri.includes('localhost') : uri.includes('.workers.dev'));
   }
 
   async handleCallback() {
-    const code = this.requestURL.searchParams.get('code');
-    const stateAuthKey = this.requestURL.searchParams.get('state');
+    const code = this.requestURL.searchParams.get('code'), stateAuthKey = this.requestURL.searchParams.get('state');
     if (!code || !stateAuthKey) return renderError(400, 'Missing code or state', '/callback/');
-
     const config = this.getGoogleConfig();
     const tokenRes = await fetch(config.token_uri, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code,
-        client_id: config.client_id,
-        client_secret: config.client_secret,
-        redirect_uri: this.getRedirectUri(config),
-        grant_type: 'authorization_code'
-      })
+      body: new URLSearchParams({ code, client_id: config.client_id, client_secret: config.client_secret, redirect_uri: this.getRedirectUri(config), grant_type: 'authorization_code' })
     });
-
-    if (!tokenRes.ok) {
-      const err = await tokenRes.text();
-      console.error(`[YouTubeService.callback] Token exchange failed: ${err}`);
-      return renderError(500, 'Failed to exchange code for tokens', '/callback/');
-    }
-
+    if (!tokenRes.ok) return renderError(500, 'Token exchange failed', '/callback/');
     const tokens = await tokenRes.json();
-    if (!tokens.refresh_token) {
-      console.error('[YouTubeService.callback] No refresh token received');
-      // If we don't get a refresh token, we might already have one or user didn't consent properly
-    }
-
-    // Get user email to name the entry
-    const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: { 'Authorization': `Bearer ${tokens.access_token}` }
-    });
+    if (!tokens.refresh_token) return renderError(400, 'Refresh token missing. Reconnect required.', '/callback/');
+    const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { 'Authorization': `Bearer ${tokens.access_token}` } });
     const userInfo = userRes.ok ? await userRes.json() : { email: 'YouTube Account' };
-
-    // Save refresh token to KVS
-    const kvs = new KVSAdapter(this.env, 'YOUTUBE', stateAuthKey);
-    const value = JSON.stringify({
-      refresh_token: tokens.refresh_token,
-      email: userInfo.email
-    });
-    
-    await kvs.put(new KVSValue(null, userInfo.email, value, 'YOUTUBE', stateAuthKey));
-
+    await new KVSAdapter(this.env, 'YOUTUBE', stateAuthKey).put(new KVSValue(null, userInfo.email, JSON.stringify({ refresh_token: tokens.refresh_token, email: userInfo.email }), 'YOUTUBE', stateAuthKey));
     return Response.redirect(`${this.requestURL.origin}${Endpoint.youtube}?key=${stateAuthKey}`, 302);
+  }
+
+  async viewPlaylists() {
+    const token = await this.getValidToken();
+    if (token instanceof Response) return token;
+    try {
+      const playlists = await this.fetchYouTubePlaylists(token);
+      const head = renderUpdateActionScript(Endpoint.youtube);
+      return new Response(renderLayout('RSS: Playlists', UI.renderPlaylistTable(this.uuid, playlists, this.authKey), head), { headers: { 'Content-Type': 'text/html' } });
+    } catch (e) {
+      return renderError(502, 'Failed to fetch playlists', this.requestURL.pathname);
+    }
+  }
+
+  async getValidToken() {
+    if (!this.authKey || !this.kvs) return renderError(401, 'Unauthorized', this.requestURL.pathname);
+    const entry = await this.kvs.get(this.uuid);
+    if (!entry) return renderError(404, 'Account not found', this.requestURL.pathname);
+    const data = JSON.parse(entry.value);
+    return await this.getAccessToken(data.refresh_token);
+  }
+
+  async getAccessToken(refreshToken) {
+    const config = this.getGoogleConfig();
+    const res = await fetch(config.token_uri, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ refresh_token: refreshToken, client_id: config.client_id, client_secret: config.client_secret, grant_type: 'refresh_token' })
+    });
+    if (!res.ok) throw new Error('Refresh failed');
+    return (await res.json()).access_token;
+  }
+
+  async fetchYouTubePlaylists(accessToken) {
+    const url = new URL('https://www.googleapis.com/youtube/v3/playlists');
+    url.searchParams.set('part', 'snippet,contentDetails');
+    url.searchParams.set('mine', 'true');
+    url.searchParams.set('maxResults', '50');
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+    if (!res.ok) throw new Error('Playlist fetch failed');
+    return (await res.json()).items || [];
+  }
+
+  async getPlaylistRSS() {
+    const token = await this.getValidToken();
+    if (token instanceof Response) return token;
+    try {
+      const items = await this.fetchPlaylistItems(token, this.playlistId);
+      const rss = this.convertYouTubeToRSS(items);
+      const encoded = new TextEncoder().encode(rss);
+      return new Response(encoded, { headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Content-Length': encoded.byteLength.toString(), 'Cache-Control': 'public, max-age=1800' } });
+    } catch (e) {
+      return renderError(502, 'Failed to generate feed', this.requestURL.pathname);
+    }
+  }
+
+  async fetchPlaylistItems(accessToken, playlistId) {
+    const url = new URL('https://www.googleapis.com/youtube/v3/playlistItems');
+    url.searchParams.set('part', 'snippet,contentDetails');
+    url.searchParams.set('playlistId', playlistId);
+    url.searchParams.set('maxResults', '50');
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+    if (!res.ok) throw new Error('Items fetch failed');
+    return (await res.json()).items || [];
+  }
+
+  convertYouTubeToRSS(items) {
+    const rssItems = items.map(item => ({
+      title: item.snippet.title,
+      link: `https://www.youtube.com/watch?v=${item.contentDetails.videoId}`,
+      guid: item.contentDetails.videoId,
+      pubDate: new Date(item.snippet.publishedAt).toUTCString(),
+      description: { '__cdata': `<p>${item.snippet.description}</p><p><img src="${item.snippet.thumbnails?.high?.url || ''}"></p>` }
+    }));
+    const rssObj = {
+      '?xml': { '@_version': '1.0', '@_encoding': 'UTF-8' },
+      rss: {
+        '@_version': '2.0',
+        channel: {
+          title: 'YouTube Playlist Feed',
+          link: 'https://www.youtube.com',
+          description: 'YouTube Playlist converted to RSS by RSS-THE-PLANET',
+          item: rssItems
+        }
+      }
+    };
+    return new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: '@_', format: true, suppressBooleanAttributes: false, suppressEmptyNode: true, cdataPropName: '__cdata' }).build(rssObj);
   }
 
   async handleDelete() {
     if (!this.authKey || !this.kvs) return renderError(401, 'Unauthorized', this.requestURL.pathname);
-    if (!this.uuid) return renderError(400, 'ID required', this.requestURL.pathname);
     await this.kvs.delete(this.uuid);
     return Response.redirect(`${this.requestURL.origin}${Endpoint.youtube}?key=${this.authKey}`, 302);
   }
 
   async getSubmitForm() {
-    const key = this.requestURL.searchParams.get('key') || '';
-    const headExtras = renderUpdateActionScript(Endpoint.youtube);
-    
-    if (!this.authKey) {
-      return new Response(renderLayout('RSS THE PLANET: YouTube', UI.renderLoginForm(key, `${Endpoint.youtube}?key=${key}`), headExtras), {
-        headers: { 'Content-Type': 'text/html' },
-        status: 200
-      });
-    }
-
+    const key = this.requestURL.searchParams.get('key') || '', head = renderUpdateActionScript(Endpoint.youtube);
+    if (!this.authKey) return new Response(renderLayout('RSS: YouTube', UI.renderLoginForm(key, `${Endpoint.youtube}?key=${key}`), head), { headers: { 'Content-Type': 'text/html' } });
     const entries = await this.kvs.list();
-    const rows = entries.length === 0 
-      ? '<tr class="empty-state"><td colspan="3">No YouTube Accounts connected.</td></tr>' 
-      : entries.map(f => UI.renderAccountTableRow(f, this.authKey)).join('');
-
-    const authUrl = `${Endpoint.youtube}auth?key=${this.authKey}`;
-    const content = UI.renderDashboard(this.authKey, authUrl, rows);
-
-    return new Response(renderLayout('RSS THE PLANET: YouTube', content, headExtras), {
-      headers: { 'Content-Type': 'text/html' },
-      status: 200
-    });
-  }
-
-  async viewPlaylists() {
-    // Placeholder for next step
-    return renderError(501, 'Playlist viewing not yet implemented', this.requestURL.pathname);
-  }
-
-  async getPlaylistRSS() {
-    // Placeholder for next step
-    return renderError(501, 'Playlist RSS not yet implemented', this.requestURL.pathname);
+    const rows = entries.length === 0 ? '<tr class="empty-state"><td colspan="3">No accounts connected.</td></tr>' : entries.map(f => UI.renderAccountTableRow(f, this.authKey)).join('');
+    return new Response(renderLayout('RSS: YouTube', UI.renderDashboard(this.authKey, `${Endpoint.youtube}auth?key=${this.authKey}`, rows), head), { headers: { 'Content-Type': 'text/html' } });
   }
 }
