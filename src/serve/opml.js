@@ -7,6 +7,7 @@ import { renderLayout } from '../ui/theme.js';
 import { KVSAdapter, KVSValue } from '../adapt/kvs.js';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 import * as UI from '../ui/opml.js';
+import { renderUpdateActionScript } from '../ui/shared.js';
 
 // MARK: OPMLService Class
 
@@ -143,25 +144,7 @@ export class OPMLService extends Service {
   async getSubmitForm() {
     const key = this.requestURL.searchParams.get('key') || '';
     const actionUrl = Endpoint.opml + (key ? `?key=${key}` : '');
-
-    const headExtras = `
-      <script>
-        function updateAction() {
-          const key = document.getElementById('key').value;
-          const form = document.getElementById('opml-form');
-          const baseUrl = "${Endpoint.opml}";
-          form.action = baseUrl + (key ? '?key=' + encodeURIComponent(key) : '');
-          
-          // Update download links
-          const links = document.querySelectorAll('.download-link');
-          links.forEach(link => {
-            const id = link.getAttribute('data-id');
-            const action = link.getAttribute('data-action');
-            link.href = baseUrl + encodeURIComponent(id) + '/' + action + (key ? '?key=' + encodeURIComponent(key) : '');
-          });
-        }
-      </script>
-    `;
+    const headExtras = renderUpdateActionScript(Endpoint.opml);
 
     let content;
     if (this.authKey) {

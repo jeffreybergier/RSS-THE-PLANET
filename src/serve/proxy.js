@@ -6,7 +6,8 @@ import { Option } from '../lib/option.js';
 import { renderError } from '../ui/error.js';
 import { renderLayout } from '../ui/theme.js';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
-import { renderProxySubmitForm } from '../ui/proxy.js';
+import { renderProxySubmitForm, renderLoginForm } from '../ui/proxy.js';
+import { renderUpdateActionScript } from '../ui/shared.js';
 
 // MARK: ProxyService Class
 
@@ -63,8 +64,11 @@ export class ProxyService extends Service {
   }
 
   getSubmitForm() {
-    const content = renderProxySubmitForm();
-    return new Response(renderLayout('RSS THE PLANET: Proxy', content), {
+    const key = this.requestURL.searchParams.get('key') || '';
+    const actionUrl = Endpoint.proxy + (key ? `?key=${key}` : '');
+    const headExtras = renderUpdateActionScript(Endpoint.proxy);
+    const content = this.authKey ? renderProxySubmitForm(key) : renderLoginForm(key, actionUrl);
+    return new Response(renderLayout('RSS THE PLANET: Proxy', content, headExtras), {
       headers: { 'Content-Type': 'text/html' },
       status: 200
     });

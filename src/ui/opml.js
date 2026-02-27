@@ -1,18 +1,8 @@
 import { Endpoint } from '../serve/service.js';
+import * as Shared from './shared.js';
 
-export const renderLoginForm = (key, actionUrl) => `
-  <h2>RSS THE PLANET: OPML Rewriter</h2>
-  <p>Please enter your API Key to access the OPML Rewriter.</p>
-  <form id="opml-form" action="${actionUrl}" method="GET">
-    <p>
-      <label for="key">API Key:</label>
-      <div class="input-group">
-        <input type="text" id="key" name="key" value="${key}" oninput="updateAction()">
-        <button type="button" class="secondary" onclick="window.location.href='${Endpoint.opml}?key=' + encodeURIComponent(document.getElementById('key').value)">Update</button>
-      </div>
-    </p>
-  </form>
-`;
+export const renderLoginForm = (key, actionUrl) => 
+  Shared.renderKeyLoginForm(key, actionUrl, 'RSS THE PLANET: OPML Rewriter', 'Please enter your API Key to access the OPML Rewriter.', 'opml-form');
 
 export const renderDashboardForm = (key, actionUrl, fileTable) => `
   <h2>RSS THE PLANET: OPML Rewriter</h2>
@@ -28,9 +18,9 @@ export const renderDashboardForm = (key, actionUrl, fileTable) => `
     <fieldset>
       <legend>Mode</legend>
       <input type="radio" id="mode-rewrite" name="mode" value="rewrite" checked>
-      <label for="mode-rewrite" style="display:inline;">Rewrite URLs (Process Now)</label><br>
+      <label for="mode-rewrite" class="inline">Rewrite URLs (Process Now)</label><br>
       <input type="radio" id="mode-save" name="mode" value="save">
-      <label for="mode-save" style="display:inline;">Save to Store</label>
+      <label for="mode-save" class="inline">Save to Store</label>
     </fieldset>
     <p>
       <label for="opml">OPML File:</label>
@@ -66,23 +56,16 @@ const renderFileTableRow = (f, authKey) => `
 `;
 
 export const renderFileTable = (entries, authKey) => {
+  const headers = [
+    { text: 'ID', class: 'w30' },
+    { text: 'Filename' },
+    { text: 'Actions', class: 'text-right' }
+  ];
   const tableRows = entries.length === 0
     ? '<tr class="empty-state"><td colspan="3">No OPML Files Saved.</td></tr>'
     : entries.map(f => renderFileTableRow(f, authKey)).join('');
 
-  return `
-    <h3>Stored OPML Files</h3>
-    <table>
-      <thead>
-        <tr>
-          <th style="width: 30%;">ID</th>
-          <th>Filename</th>
-          <th style="text-align: right;">Actions</th>
-        </tr>
-      </thead>
-      <tbody>${tableRows}</tbody>
-    </table>
-  `;
+  return Shared.renderDataTable('Stored OPML Files', headers, tableRows);
 };
 
 export const renderSaveConfirmation = (filename, savedKey, authKey) => `

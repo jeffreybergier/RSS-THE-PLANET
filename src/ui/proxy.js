@@ -1,13 +1,17 @@
 import { Endpoint } from '../serve/service.js';
 import { Option } from '../lib/option.js';
+import * as Shared from './shared.js';
 
-export const renderProxySubmitForm = () => `
+export const renderLoginForm = (key, actionUrl) =>
+  Shared.renderKeyLoginForm(key, actionUrl, 'RSS THE PLANET: Proxy', 'Please enter your API Key to access the Proxy Service.', 'proxy-login-form');
+
+export const renderProxySubmitForm = (key) => `
   <h2>RSS THE PLANET: Proxy</h2>
   <h2>Generate Proxy URL</h2>
   <form action="${Endpoint.proxy}" method="GET">
     <p>
       <label for="key">API Key:</label>
-      <input type="text" id="key" name="key">
+      <input type="text" id="key" name="key" value="${key || ''}" oninput="updateAction()">
     </p>
     <p>
       <label for="url">Target URL</label>

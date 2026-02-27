@@ -8,6 +8,7 @@ import { KVSAdapter, KVSValue } from '../adapt/kvs.js';
 import { XMLBuilder } from 'fast-xml-parser';
 import * as Crypto from '../adapt/crypto.js';
 import * as UI from '../ui/masto.js';
+import { renderUpdateActionScript } from '../ui/shared.js';
 
 const stripTags = (html) => {
   if (!html) return '';
@@ -338,7 +339,7 @@ export class MastoService extends Service {
   async getSubmitForm(authKey, kvs) {
     const key = this.requestURL.searchParams.get('key') || '';
     const actionUrl = Endpoint.masto + (key ? `?key=${key}` : '');
-    const headExtras = '<script>function updateAction(){const k=document.getElementById("key").value;const form=document.getElementById("masto-form");form.action="' + Endpoint.masto + '"+(k?"?key="+encodeURIComponent(k):"");}</script>';
+    const headExtras = renderUpdateActionScript(Endpoint.masto);
     let content;
     if (!authKey) {
       content = UI.renderLoginForm(key, actionUrl);
