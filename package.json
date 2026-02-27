@@ -5,8 +5,8 @@
   "scripts": {
     "start": "node ./src/_node-boot.js",
     "start:wrangler": "wrangler dev --ip 0.0.0.0",
-    "test": "npm run test:medium",
-    "test:wrangler": "npm run test:medium:wrangler",
+    "test": "npm run lint && npm run test:medium",
+    "test:wrangler": "npm run lint && npm run test:medium:wrangler",
     "test:fast": "vitest run --pool=forks --exclude **/proxy-test-end2end-w3c-validation.test.js",
     "test:fast:wrangler": "vitest run --exclude **/proxy-test-end2end-w3c-validation.test.js",
     "test:medium": "npm run test:fast && npm run test:e2e:fast",
@@ -19,6 +19,7 @@
     "test:e2e:full:wrangler": "touch tests/.run-full-suite && TEST_TARGET=wrangler vitest run tests/proxy-test-end2end-w3c-validation.test.js --pool=forks",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "check": "npm run lint && prettier --check .",
     "format": "prettier --write .",
     "prepare": "husky"
   },

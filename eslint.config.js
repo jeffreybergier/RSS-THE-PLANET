@@ -19,7 +19,7 @@ export default [
       },
     },
     rules: {
-      'max-depth': ['warn', 2],
+      'max-depth': ['warn', 3],
       'max-lines-per-function': ['warn', { max: 40, skipBlankLines: true, skipComments: true }],
       'complexity': ['warn', 10],
       'no-console': 'off',
