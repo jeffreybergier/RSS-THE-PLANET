@@ -110,23 +110,37 @@ async function getW3CValidation(xmlBody, url) {
   return null;
 }
 
+function extractErrors(resp) {
+  return [].concat(resp.errors?.errorlist?.error || []);
+}
+
+function extractWarnings(resp) {
+  return [].concat(resp.warnings?.warninglist?.warning || []);
+}
+
+function parseValidationResponse(jsonObj) {
+  const resp = jsonObj?.Envelope?.Body?.feedvalidationresponse;
+  if (!resp) return [];
+  return [...extractErrors(resp), ...extractWarnings(resp)];
+}
+
+function mapIssueToFingerprint(issue) {
+  const type = issue.type || 'Unknown';
+  const text = issue.text || '';
+  const fingerprint = `${issue.parent || 'root'}>${issue.element || 'node'}|${type}|${text.substring(0, 20).replace(/\s+/g, '_')}`;
+  return { key: fingerprint, type };
+}
+
 function analyzeIssues(xmlResponse) {
   if (!xmlResponse) return [];
   const parser = new XMLParser({ removeNSPrefix: true, ignoreAttributes: false });
   try {
     const jsonObj = parser.parse(xmlResponse);
-    const response = jsonObj?.Envelope?.Body?.feedvalidationresponse;
-    if (!response) return [];
-    const errors = [].concat(response.errors?.errorlist?.error || []);
-    const warnings = [].concat(response.warnings?.warninglist?.warning || []);
+    const issues = parseValidationResponse(jsonObj);
     const knownFailures = ['SelfDoesntMatchLocation', 'ContainsHTML', 'ContainsUndeclaredHTML', 'NotHtml', 'UnexpectedWhitespace', 'MissingAtomSelfLink'];
-    return [...errors, ...warnings]
-      .map(issue => {
-        const type = issue.type || 'Unknown';
-        const text = issue.text || '';
-        const fingerprint = `${issue.parent || 'root'}>${issue.element || 'node'}|${type}|${text.substring(0, 20).replace(/\s+/g, '_')}`;
-        return { key: fingerprint, type };
-      })
+    
+    return issues
+      .map(mapIssueToFingerprint)
       .filter(issue => !knownFailures.includes(issue.type));
   } catch {
     return [];

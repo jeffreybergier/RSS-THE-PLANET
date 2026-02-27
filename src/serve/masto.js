@@ -7,46 +7,37 @@ import { renderLayout } from '../ui/theme.js';
 import { KVSAdapter, KVSValue } from '../adapt/kvs.js';
 import { XMLBuilder } from 'fast-xml-parser';
 import * as Crypto from '../adapt/crypto.js';
+import * as UI from '../ui/masto.js';
 
 const stripTags = (html) => {
   if (!html) return '';
-  let result = '';
+  let res = '';
   let inTag = false;
   for (let i = 0; i < html.length; i++) {
-    const char = html[i];
-    if (char === '<') {
-      inTag = true;
-    } else if (char === '>') {
-      inTag = false;
-    } else if (!inTag) {
-      result += char;
-    }
+    if (html[i] === '<') inTag = true;
+    else if (html[i] === '>') inTag = false;
+    else if (!inTag) res += html[i];
   }
-  return result;
+  return res;
 };
 
 // MARK: MastoService Class
 
 export class MastoService extends Service {
   static canHandle(request) {
-    const url = new URL(request.url);
-    return url.pathname.startsWith(Endpoint.masto);
+    return new URL(request.url).pathname.startsWith(Endpoint.masto);
   }
 
   constructor(request, env, ctx) {
     super(request, env, ctx);
-    this.request = request;
     this.requestURL = new URL(request.url);
     this.baseURL = new URL(Endpoint.proxy, this.requestURL.origin);
-    this.authKey = null;
-    this.kvs = null;
-
-    const pathComponents = this.requestURL.pathname.split('/');
-    const mastoIndex = pathComponents.indexOf('masto');
-    if (mastoIndex !== -1 && pathComponents[mastoIndex + 1]) {
-      this.uuid = pathComponents[mastoIndex + 1];
-      this.type = pathComponents[mastoIndex + 2] || null;
-      this.subtype = pathComponents[mastoIndex + 3] || null;
+    const path = this.requestURL.pathname.split('/');
+    const idx = path.indexOf('masto');
+    if (idx !== -1 && path[idx + 1]) {
+      this.uuid = path[idx + 1];
+      this.type = path[idx + 2] || null;
+      this.subtype = path[idx + 3] || null;
     }
   }
 
@@ -54,346 +45,205 @@ export class MastoService extends Service {
     try {
       const authKey = await Auth.validate(this.request);
       let kvs = null;
-      
       if (authKey) {
         this.request.env = this.env;
-        const sha256 = new Crypto.SHA256(this.request);
-        kvs = new KVSAdapter(this.env, 'MASTO', authKey, sha256);
-      } else {
-        if (this.request.method === 'POST') {
-          // Pass nulls to handlePost, it will handle the 401
-          return await this.handlePost(null, null); 
-        }
-      }
+        kvs = new KVSAdapter(this.env, 'MASTO', authKey, new Crypto.SHA256(this.request));
+      } else if (this.request.method === 'POST') return await this.handlePost(null, null);
 
-      if (this.request.method === 'POST') {
-        return await this.handlePost(authKey, kvs);
-      }
-
-      const type = this.type;
-      if (type === 'delete') {
-        return await this.handleDelete(authKey, kvs);
-      }
-      if (type === 'status') {
-        return await this.handleStatus(authKey, kvs);
-      }
-      if (type === 'notifications') {
-        return await this.handleStatus(authKey, kvs);
-      }
+      if (this.request.method === 'POST') return await this.handlePost(authKey, kvs);
+      if (this.type === 'delete') return await this.handleDelete(authKey, kvs);
+      if (this.type === 'status' || this.type === 'notifications') return await this.handleStatus(authKey, kvs);
 
       return await this.getSubmitForm(authKey, kvs);
-    } catch (error) {
-      console.error(`[MastoService.handleRequest] error: ${error.message}`);
-      return renderError(500, 'An internal server error occurred', this.requestURL.pathname);
+    } catch (e) {
+      console.error(`[MastoService.handleRequest] error: ${e.message}`);
+      return renderError(500, 'Internal server error', this.requestURL.pathname);
     }
   }
 
   async handleDelete(authKey, kvs) {
-    if (!authKey || !kvs) {
-      return renderError(401, 'The key parameter was missing or incorrect', this.requestURL.pathname);
-    }
-    const id = this.uuid;
-    if (!id) {
-      return renderError(400, 'Entry ID is required', this.requestURL.pathname);
-    }
-
+    if (!authKey || !kvs) return renderError(401, 'Unauthorized', this.requestURL.pathname);
+    if (!this.uuid) return renderError(400, 'ID required', this.requestURL.pathname);
     try {
-      await kvs.delete(id);
+      await kvs.delete(this.uuid);
     } catch (e) {
       console.error(`[MastoService.handleDelete] error: ${e.message}`);
-      return renderError(400, 'Could not delete entry', this.requestURL.pathname);
+      return renderError(400, 'Delete failed', this.requestURL.pathname);
     }
-
-    return new Response(null, {
-      status: 302,
-      headers: {
-        'Location': `${Endpoint.masto}?key=${authKey}`
-      }
-    });
+    return new Response(null, { status: 302, headers: { 'Location': `${Endpoint.masto}?key=${authKey}` } });
   }
 
   async handleStatus(authKey, kvs) {
-    if (!authKey || !kvs) {
-      return renderError(401, 'The key parameter was missing or incorrect', this.requestURL.pathname);
-    }
-    if (!this.uuid || (!this.subtype && this.type !== 'notifications')) {
-      return renderError(400, 'Invalid Request', this.requestURL.pathname);
-    }
+    const err = this.validateStatusRequest(authKey, kvs);
+    if (err) return err;
 
     const entry = await kvs.get(this.uuid);
-    if (!entry) {
-      return renderError(404, 'Mastodon credentials not found', this.requestURL.pathname);
-    }
-
-    const server = entry.name;
-    const apiKey = entry.value;
-
-    if (!apiKey) {
-      console.error('[MastoService] Decryption failed or API Key missing');
-      return renderError(500, 'Could not decrypt credentials. Please re-save them.', this.requestURL.pathname);
+    if (!entry || !entry.value) {
+      return renderError(entry ? 500 : 404, entry ? 'Decryption failed' : 'Not found', this.requestURL.pathname);
     }
 
     const mode = this.type === 'notifications' ? 'notifications' : this.subtype;
-    let apiPath;
-    if (mode === 'home') {
-      apiPath = '/api/v1/timelines/home';
-    } else if (mode === 'local') {
-      apiPath = '/api/v1/timelines/public?local=true';
-    } else if (mode === 'user') {
-      // Need ID. Fetch verify_credentials first.
-      const verifyUrl = new URL('/api/v1/accounts/verify_credentials', server);
-      const verifyRes = await fetch(verifyUrl, {
-        headers: { 'Authorization': `Bearer ${apiKey}` }
-      });
-      if (!verifyRes.ok) return verifyRes;
-      const me = await verifyRes.json();
-      apiPath = `/api/v1/accounts/${me.id}/statuses`;
-    } else if (mode === 'notifications') {
-      if (this.type !== 'notifications') {
-        return renderError(400, 'Invalid Request Path', this.requestURL.pathname);
-      }
-      apiPath = '/api/v1/notifications';
-    } else {
-      return renderError(400, 'Invalid status type', this.requestURL.pathname);
-    }
+    const apiPath = await this.getAPIPath(mode, entry.name, entry.value);
+    if (apiPath instanceof Response) return apiPath;
 
-    let allStatuses = [];
-    let maxId = null;
-    let attempts = 0;
-    const maxAttempts = 2; // Safety guard
+    const all = await this.fetchStatuses(apiPath, entry.name, entry.value);
+    if (all instanceof Response) return all;
 
-    while (allStatuses.length < 50 && attempts < maxAttempts) {
-      const apiUrl = new URL(apiPath, server);
-      if (maxId) {
-        apiUrl.searchParams.set('max_id', maxId);
-      }
+    return this.renderRSSResponse(all, mode, authKey, entry.name);
+  }
 
-      const response = await fetch(apiUrl, {
-        headers: { 'Authorization': `Bearer ${apiKey}` }
-      });
+  validateStatusRequest(authKey, kvs) {
+    if (!authKey || !kvs) return renderError(401, 'Unauthorized', this.requestURL.pathname);
+    if (!this.uuid) return renderError(400, 'Invalid Request', this.requestURL.pathname);
+    if (!this.subtype && this.type !== 'notifications') return renderError(400, 'Invalid Request', this.requestURL.pathname);
+    return null;
+  }
 
-      if (!response.ok) {
-        if (allStatuses.length > 0) break; // Return what we have if a middle page fails
-        return response;
-      }
+  renderRSSResponse(all, mode, authKey, serverName) {
+    const rss = mode === 'notifications' 
+      ? this.convertNotificationsJSONtoRSS(all, authKey, serverName) 
+      : this.convertJSONtoRSS(all, mode, authKey, serverName);
+    const encoded = new TextEncoder().encode(rss);
+    const headers = { 
+      'Content-Type': 'text/xml; charset=utf-8', 
+      'Content-Length': encoded.byteLength.toString(), 
+      'Cache-Control': 'public, max-age=600' 
+    };
+    return new Response(encoded, { headers });
+  }
 
-      const statuses = await response.json();
-      if (!Array.isArray(statuses) || statuses.length === 0) break;
+  async getAPIPath(mode, server, apiKey) {
+    if (mode === 'home') return '/api/v1/timelines/home';
+    if (mode === 'local') return '/api/v1/timelines/public?local=true';
+    if (mode === 'user') return this.getUserAPIPath(server, apiKey);
+    if (mode === 'notifications' && this.type === 'notifications') return '/api/v1/notifications';
+    return renderError(400, 'Invalid status type', this.requestURL.pathname);
+  }
 
-      allStatuses = allStatuses.concat(statuses);
-      
-      // Get the last ID for the next page
-      maxId = statuses[statuses.length - 1].id;
-      attempts++;
-
-      // If we got exactly the same number of items as before, or very few, 
-      // we might be hitting a limit or loop, but usually Mastodon is reliable here.
-    }
-
-    // Trim to exactly 100 if we went over
-    if (allStatuses.length > 100) {
-      allStatuses = allStatuses.slice(0, 100);
-    }
-
-    let rss;
-    if (mode === 'notifications') {
-      rss = this.convertNotificationsJSONtoRSS(allStatuses, authKey, server);
-    } else {
-      rss = this.convertJSONtoRSS(allStatuses, mode, authKey, server);
-    }
-    const encodedRSS = new TextEncoder().encode(rss);
-
-    return new Response(encodedRSS, {
-      headers: {
-        'Content-Type': 'text/xml; charset=utf-8',
-        'Content-Length': encodedRSS.byteLength.toString(),
-        'Cache-Control': 'public, max-age=600'
-      }
+  async getUserAPIPath(server, apiKey) {
+    const res = await fetch(new URL('/api/v1/accounts/verify_credentials', server), { 
+      headers: { 'Authorization': `Bearer ${apiKey}` } 
     });
+    if (!res.ok) return res;
+    const me = await res.json();
+    return `/api/v1/accounts/${me.id}/statuses`;
+  }
+
+  async fetchStatuses(apiPath, server, apiKey) {
+    let all = [], maxId = null, attempts = 0;
+    while (all.length < 50 && attempts < 2) {
+      const url = new URL(apiPath, server);
+      if (maxId) url.searchParams.set('max_id', maxId);
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${apiKey}` } });
+      if (!res.ok) return all.length > 0 ? all : res;
+      const json = await res.json();
+      if (!Array.isArray(json) || json.length === 0) break;
+      all = all.concat(json);
+      maxId = json[json.length - 1].id;
+      attempts++;
+    }
+    return all.slice(0, 100);
   }
 
   convertNotificationsJSONtoRSS(json, authKey, serverUrl) {
     if (!Array.isArray(json)) return '';
-
-    const builder = new XMLBuilder({
-      ignoreAttributes: false,
-      attributeNamePrefix: '@_',
-      format: true,
-      suppressBooleanAttributes: false,
-      suppressEmptyNode: true,
-      cdataPropName: '__cdata'
-    });
-
     const hostname = new URL(serverUrl).hostname;
+    const items = json.map(n => this.mapNotificationToRSS(n, authKey, hostname));
+    return this.buildRSS(items, `${hostname} - Notifications`, serverUrl);
+  }
 
-    const items = json.map(notif => {
-      const type = notif.type;
-      const account = notif.account;
-      const status = notif.status;
-      const name = account.display_name || account.username;
-      
-      let title;
-      let html;
-      let url = status?.url || account.url;
-
-      // Build Triggerer Signature
-      let proxiedAvatar;
-      try {
-        proxiedAvatar = Codec.encode(new URL(account.avatar), Option.image, this.baseURL, authKey).toString();
-      } catch {
-        proxiedAvatar = account.avatar;
-      }
-      const triggererSignature = `
-        <div>
-          <strong>${this.formatAccountName(account, hostname)}</strong><br>
-          <p><img src="${proxiedAvatar}" width="96" height="96" alt="${name}" style="border-radius: 4px;"></p>
-        </div>
-      `;
-
-      if (status) {
-        html = `<div>${triggererSignature}<hr>${this.formatStatusContent(status, authKey, hostname)}</div>`;
-      } else {
-        html = `<div>${triggererSignature}</div>`;
-      }
-
-      switch (type) {
-      case 'mention':
-        title = `💬 Mention from ${name}`;
-        break;
-      case 'reblog':
-        title = `🔁 Boosted by ${name}`;
-        break;
-      case 'favourite':
-        title = `⭐ Favorited by ${name}`;
-        break;
-      case 'follow':
-        title = `👤 Followed by ${name}`;
-        break;
-      case 'follow_request':
-        title = `🔒 Follow request from ${name}`;
-        break;
-      case 'poll':
-        title = `🗳️ Poll finished: ${status?.content?.substring(0, 30)}...`;
-        break;
-      case 'status':
-        title = `🔔 Post from ${name}`;
-        break;
-      case 'update':
-        title = `📝 Post edited by ${name}`;
-        break;
-      default:
-        title = `🔔 ${type} from ${name}`;
-      }
-
-      return {
-        title: title,
-        link: this.wrapBrutaldon(url),
-        guid: {
-          '@_isPermaLink': 'true',
-          '#text': `${notif.id}-${type}`
-        },
-        pubDate: new Date(notif.created_at).toUTCString(),
-        description: { '__cdata': html },
-        'dc:creator': this.formatAccountName(account, hostname),
-        'dc:language': status?.language || 'en'
-      };
-    });
-
-    const instanceName = new URL(serverUrl).hostname;
-    const channelTitle = `${instanceName} - Notifications`;
-    const rssObj = {
-      '?xml': { '@_version': '1.0', '@_encoding': 'UTF-8' },
-      rss: {
-        '@_version': '2.0',
-        '@_xmlns:content': 'http://purl.org/rss/1.0/modules/content/',
-        '@_xmlns:dc': 'http://purl.org/dc/elements/1.1/',
-        '@_xmlns:atom': 'http://www.w3.org/2005/Atom',
-        '@_xmlns:sy': 'http://purl.org/rss/1.0/modules/syndication/',
-        channel: {
-          title: channelTitle,
-          link: serverUrl,
-          description: 'RSS-THE-PLANET Mastodon Feed',
-          'sy:updatePeriod': 'hourly',
-          'sy:updateFrequency': '1',
-          language: 'en-us',
-          generator: 'RSS-THE-PLANET',
-          item: items
-        }
-      }
+  mapNotificationToRSS(notif, authKey, hostname) {
+    const { type, account, status } = notif;
+    const name = account.display_name || account.username;
+    const proxiedAvatar = this.proxyURL(account.avatar, Option.image, authKey);
+    const triggerer = UI.renderTriggererSignature(account, hostname, proxiedAvatar);
+    const content = status ? this.formatStatusContent(status, authKey, hostname) : '';
+    const html = status ? `<div>${triggerer}<hr>${content}</div>` : `<div>${triggerer}</div>`;
+    
+    return {
+      title: this.getNotificationTitle(type, name, status),
+      link: this.wrapBrutaldon(status?.url || account.url),
+      guid: { '@_isPermaLink': 'true', '#text': `${notif.id}-${type}` },
+      pubDate: new Date(notif.created_at).toUTCString(),
+      description: { '__cdata': html },
+      'dc:creator': this.formatAccountName(account, hostname),
+      'dc:language': status?.language || 'en'
     };
+  }
 
-    return builder.build(rssObj);
+  getNotificationTitle(type, name, status) {
+    const titles = {
+      mention: `💬 Mention from ${name}`,
+      reblog: `🔁 Boosted by ${name}`,
+      favourite: `⭐ Favorited by ${name}`,
+      follow: `👤 Followed by ${name}`,
+      follow_request: `🔒 Follow request from ${name}`,
+      poll: `🗳️ Poll finished: ${status?.content?.substring(0, 30)}...`,
+      status: `🔔 Post from ${name}`,
+      update: `📝 Post edited by ${name}`
+    };
+    return titles[type] || `🔔 ${type} from ${name}`;
   }
 
   convertJSONtoRSS(json, subtype, authKey, serverUrl) {
     if (!Array.isArray(json)) return '';
-
-    const builder = new XMLBuilder({
-      ignoreAttributes: false,
-      attributeNamePrefix: '@_',
-      format: true,
-      suppressBooleanAttributes: false,
-      suppressEmptyNode: true,
-      cdataPropName: '__cdata'
-    });
-
     const hostname = new URL(serverUrl).hostname;
+    const items = json.map(s => this.mapStatusToRSS(s, authKey, hostname));
+    const title = `${hostname} - ${subtype.charAt(0).toUpperCase() + subtype.slice(1)}`;
+    return this.buildRSS(items, title, serverUrl);
+  }
 
-    const items = json.map(status => {
-      const isBoost = status.reblog;
-      const data = isBoost ? status.reblog : status;
-      const isReply = data.in_reply_to_id;
-      const author = data.account;
+  mapStatusToRSS(status, authKey, hostname) {
+    const data = status.reblog || status;
+    return {
+      title: this.getStatusTitle(status),
+      link: this.wrapBrutaldon(data.url),
+      guid: { '@_isPermaLink': 'true', '#text': data.url },
+      pubDate: new Date(data.created_at).toUTCString(),
+      description: { '__cdata': this.formatStatusContent(data, authKey, hostname) },
+      'dc:creator': this.formatAccountName(data.account, hostname),
+      'dc:language': data.language || 'en'
+    };
+  }
 
-      // 1. Build RSS Content
-      const html = this.formatStatusContent(data, authKey, hostname);
+  getStatusTitle(status) {
+    if (status.reblog) {
+      const booster = status.account.display_name || status.account.username;
+      return `🚀 by ${booster}`;
+    }
+    const data = status;
+    const author = data.account;
+    if (data.in_reply_to_id) {
+      const mentions = data.mentions || [];
+      const replyTo = mentions.find(m => m.id === data.in_reply_to_account_id) || (data.in_reply_to_account_id === author.id ? author : null);
+      const target = replyTo ? (replyTo.display_name || replyTo.username) : 'Post';
+      return `↩️ to ${target}`;
+    }
+    return this.getOriginalStatusTitle(data);
+  }
 
-      // 2. Generate a clean type-based title
-      let displayTitle;
-      if (isReply) {
-        const replyToAccount = data.mentions?.find(m => m.id === data.in_reply_to_account_id) || (data.in_reply_to_account_id === author.id ? author : null);
-        const target = replyToAccount ? (replyToAccount.display_name || replyToAccount.username) : 'Post';
-        displayTitle = `↩️ to ${target}`;
-      } else if (isBoost) {
-        const booster = status.account;
-        displayTitle = `🚀 by ${booster.display_name || booster.username}`;
-      } else {
-        const types = [];
-        const text = stripTags(data.content).trim();
-        if (text.length > 0) types.push('💬');
-        
-        const hasImages = data.media_attachments?.some(m => m.type === 'image');
-        const hasVideos = data.media_attachments?.some(m => m.type === 'video' || m.type === 'gifv');
-        if (hasImages) types.push('📷');
-        if (hasVideos) types.push('📹');
+  getOriginalStatusTitle(data) {
+    const types = [];
+    if (stripTags(data.content).trim().length > 0) types.push('💬');
+    
+    const media = data.media_attachments || [];
+    if (media.some(m => m.type === 'image')) types.push('📷');
+    if (media.some(m => m.type === 'video' || m.type === 'gifv')) types.push('📹');
 
-        const linkCount = (data.content?.match(/<a /g) || []).length;
-        const mentionCount = (data.mentions || []).length;
-        const tagCount = (data.tags || []).length;
-        if (data.card || linkCount > (mentionCount + tagCount)) {
-          types.push('🔗');
-        }
+    if (this.hasLinks(data)) types.push('🔗');
+    
+    const name = data.account.display_name || data.account.username;
+    return `${types.join('・') || '💬'} from ${name}`;
+  }
 
-        const emojiTitle = types.join('・') || '💬';
-        displayTitle = `${emojiTitle} from ${author.display_name || author.username}`;
-      }
+  hasLinks(data) {
+    const linkCount = (data.content?.match(/<a /g) || []).length;
+    const mentions = (data.mentions || []).length;
+    const tags = (data.tags || []).length;
+    return data.card || linkCount > (mentions + tags);
+  }
 
-      return {
-        title: displayTitle,
-        link: this.wrapBrutaldon(data.url),
-        guid: {
-          '@_isPermaLink': 'true',
-          '#text': data.url
-        },
-        pubDate: new Date(data.created_at).toUTCString(),
-        description: { '__cdata': html },
-        'dc:creator': this.formatAccountName(author, hostname),
-        'dc:language': data.language || 'en'
-      };
-    });
-
-    const instanceName = new URL(serverUrl).hostname;
-    const channelTitle = `${instanceName} - ${subtype.charAt(0).toUpperCase() + subtype.slice(1)}`;
+  buildRSS(items, title, serverUrl) {
     const rssObj = {
       '?xml': { '@_version': '1.0', '@_encoding': 'UTF-8' },
       rss: {
@@ -403,249 +253,105 @@ export class MastoService extends Service {
         '@_xmlns:atom': 'http://www.w3.org/2005/Atom',
         '@_xmlns:sy': 'http://purl.org/rss/1.0/modules/syndication/',
         channel: {
-          title: channelTitle,
-          link: serverUrl,
-          description: 'RSS-THE-PLANET Mastodon Feed',
-          'sy:updatePeriod': 'hourly',
-          'sy:updateFrequency': '1',
-          language: 'en-us',
-          lastBuildDate: new Date().toUTCString(),
-          generator: 'RSS-THE-PLANET',
-          item: items
+          title, link: serverUrl, description: 'RSS-THE-PLANET Mastodon Feed',
+          'sy:updatePeriod': 'hourly', 'sy:updateFrequency': '1', language: 'en-us',
+          lastBuildDate: new Date().toUTCString(), generator: 'RSS-THE-PLANET', item: items
         }
       }
     };
-
-    return builder.build(rssObj);
+    const options = { ignoreAttributes: false, attributeNamePrefix: '@_', format: true, suppressBooleanAttributes: false, suppressEmptyNode: true, cdataPropName: '__cdata' };
+    return new XMLBuilder(options).build(rssObj);
   }
 
   async handlePost(authKey, kvs) {
-    if (!authKey || !kvs) {
-      return renderError(401, 'The key parameter was missing or incorrect', this.requestURL.pathname);
-    }
-
-    let formData;
+    if (!authKey || !kvs) return renderError(401, 'Unauthorized', this.requestURL.pathname);
     try {
-      formData = await this.request.formData();
-    } catch (e) {
-      console.error(`[MastoService.handlePost] error reading formData: ${e.message}`);
-      return new Response('Invalid form data', { status: 400 });
-    }
-
-    const server = formData.get('server');
-    const apiKey = formData.get('apiKey');
-
-    if (typeof server !== 'string' || server.length === 0 || typeof apiKey !== 'string' || apiKey.length === 0) {
-      return new Response('Server URL and API Key are required', { status: 400 });
-    }
-
-    try {
-      const newEntry = new KVSValue(null, server, apiKey, 'MASTO', authKey);
-      const savedEntry = await kvs.put(newEntry);
-      
-      if (!savedEntry) throw new Error('Failed to save Mastodon credentials');
-
-      return new Response(null, {
-        status: 302,
-        headers: {
-          'Location': `${Endpoint.masto}?key=${authKey}`
-        }
-      });
+      const formData = await this.request.formData();
+      const server = formData.get('server'), apiKey = formData.get('apiKey');
+      if (!server || !apiKey) return new Response('Server and API Key required', { status: 400 });
+      const saved = await kvs.put(new KVSValue(null, server, apiKey, 'MASTO', authKey));
+      if (!saved) throw new Error('KVS Put failed');
+      return new Response(null, { status: 302, headers: { 'Location': `${Endpoint.masto}?key=${authKey}` } });
     } catch (e) {
       console.error(`[MastoService.handlePost] error: ${e.message}`);
-      return renderError(500, 'Failed to save credentials', this.requestURL.pathname);
+      return renderError(500, 'Save failed', this.requestURL.pathname);
     }
   }
 
-  formatHandle(account, hostname) {
-    if (!account) {
-      return 'Unknown';
-    }
-    const handle = account.acct.includes('@') ? account.acct : `${account.acct}@${hostname}`;
-    return handle;
+  proxyURL(url, option, authKey) {
+    try { return Codec.encode(new URL(url), option, this.baseURL, authKey).toString(); }
+    catch { return url; }
   }
 
   formatAccountName(account, hostname) {
-    if (!account) {
-      return 'Unknown';
-    }
-    const name = account.display_name || account.username;
-    return `${name} (${this.formatHandle(account, hostname)})`;
+    if (!account) return 'Unknown';
+    const handle = account.acct.includes('@') ? account.acct : `${account.acct}@${hostname}`;
+    return `${account.display_name || account.username} (${handle})`;
   }
 
   wrapBrutaldon(url) {
-    if (!url) return url;
-    return `https://brutaldon.org/search_results?q=${encodeURIComponent(url)}`;
+    return url ? `https://brutaldon.org/search_results?q=${encodeURIComponent(url)}` : url;
   }
 
   formatStatusContent(data, authKey, hostname) {
-    const author = data.account;
-    const name = author.display_name || author.username;
-    
-    // 1. Proxy the avatar
-    let proxiedAvatar;
-    try {
-      proxiedAvatar = Codec.encode(new URL(author.avatar), Option.image, this.baseURL, authKey).toString();
-    } catch {
-      proxiedAvatar = author.avatar;
-    }
-
-    // 2. Build RSS Content
-    let html = '<div>';
-
-    // Add the actual post content
-    html += `<div>${data.content}</div>`;
-
-    // 3. Handle Media Attachments
-    if (data.media_attachments && data.media_attachments.length > 0) {
+    let html = `<div><div>${data.content}</div>`;
+    if (data.media_attachments?.length > 0) {
       html += '<div class="media">';
-      data.media_attachments.forEach(media => {
-        try {
-          const altText = media.description || '';
-          if (media.type === 'image') {
-            const proxiedMedia = Codec.encode(new URL(media.url), Option.image, this.baseURL, authKey).toString();
-            html += `<p><img src="${proxiedMedia}" alt="${altText}"></p>`;
-          } else if (media.type === 'video' || media.type === 'gifv') {
-            const proxiedVideo = Codec.encode(new URL(media.url), Option.asset, this.baseURL, authKey).toString();
-            let posterAttr = '';
-            if (media.preview_url) {
-              const proxiedPoster = Codec.encode(new URL(media.preview_url), Option.image, this.baseURL, authKey).toString();
-              posterAttr = `poster="${proxiedPoster}"`;
-            }
-            html += `<p><video controls playsinline loop ${posterAttr} src="${proxiedVideo}"></video></p>`;
-          } else {
-            // audio, unknown
-            const proxiedLink = Codec.encode(new URL(media.url), Option.auto, this.baseURL, authKey).toString();
-            const linkTitle = altText ? `View ${media.type}: ${altText}` : `View ${media.type} attachment`;
-            html += `<p><a href="${proxiedLink}">${linkTitle}</a></p>`;
-          }
-        } catch (e) {
-          console.error(`[MastoService.formatStatusContent] Media Error: ${e.message} url: ${media.url}`);
-          html += `<p><a href="${media.url}">View ${media.type} attachment</a></p>`;
-        }
-      });
+      data.media_attachments.forEach(m => { html += this.formatMedia(m, authKey); });
       html += '</div>';
     }
+    const proxiedAvatar = this.proxyURL(data.account.avatar, Option.image, authKey);
+    const footer = UI.renderStatusFooter(data, data.account, hostname, proxiedAvatar);
+    return html + footer + '</div>';
+  }
 
-    html += `
-        <p>
-          ↩️ ${data.replies_count || 0}・🔁 ${data.reblogs_count || 0}・⭐ ${data.favourites_count || 0}
-        </p>
-        <hr>
-        <div>
-          <strong>${this.formatAccountName(author, hostname)}</strong><br>
-          <p><img src="${proxiedAvatar}" width="96" height="96" alt="${name}" style="border-radius: 4px;"></p>
-        </div>
-      </div>`;
-    
-    return html;
+  formatMedia(m, authKey) {
+    try {
+      const alt = m.description || '';
+      if (m.type === 'image') return this.renderImage(m, alt, authKey);
+      if (m.type === 'video' || m.type === 'gifv') return this.renderVideo(m, authKey);
+      return this.renderAttachmentLink(m, alt, authKey);
+    } catch (e) {
+      console.error(`[MastoService.formatMedia] error: ${e.message}`);
+      return `<p><a href="${m.url}">View ${m.type} attachment</a></p>`;
+    }
+  }
+
+  renderImage(m, alt, authKey) {
+    const src = this.proxyURL(m.url, Option.image, authKey);
+    return `<p><img src="${src}" alt="${alt}"></p>`;
+  }
+
+  renderVideo(m, authKey) {
+    const pUrl = m.preview_url ? this.proxyURL(m.preview_url, Option.image, authKey) : null;
+    const poster = pUrl ? 'poster="' + pUrl + '"' : '';
+    const src = this.proxyURL(m.url, Option.asset, authKey);
+    return `<p><video controls playsinline loop ${poster} src="${src}"></video></p>`;
+  }
+
+  renderAttachmentLink(m, alt, authKey) {
+    const aSrc = this.proxyURL(m.url, Option.auto, authKey);
+    const title = alt ? 'View ' + m.type + ': ' + alt : 'View ' + m.type + ' attachment';
+    return `<p><a href="${aSrc}">${title}</a></p>`;
   }
 
   async getSubmitForm(authKey, kvs) {
     const key = this.requestURL.searchParams.get('key') || '';
     const actionUrl = Endpoint.masto + (key ? `?key=${key}` : '');
-
-    const headExtras = `
-      <script>
-        function updateAction() {
-          const key = document.getElementById('key').value;
-          const form = document.getElementById('masto-form');
-          form.action = "${Endpoint.masto}" + (key ? '?key=' + encodeURIComponent(key) : '');
-        }
-      </script>
-    `;
-
+    const headExtras = '<script>function updateAction(){const k=document.getElementById("key").value;const form=document.getElementById("masto-form");form.action="' + Endpoint.masto + '"+(k?"?key="+encodeURIComponent(k):"");}</script>';
     let content;
-
     if (!authKey) {
-      content = `
-        <h2>RSS THE PLANET: Mastodon</h2>
-        <p>Please enter your API Key to access the Mastodon Service.</p>
-        <form id="masto-form" action="${actionUrl}" method="GET">
-          <p>
-            <label for="key">API Key:</label>
-            <div class="input-group">
-              <input type="text" id="key" name="key" value="${key}" oninput="updateAction()">
-              <button type="button" class="secondary" onclick="window.location.href='${Endpoint.masto}?key=' + encodeURIComponent(document.getElementById('key').value)">Update</button>
-            </div>
-          </p>
-        </form>
-      `;
+      content = UI.renderLoginForm(key, actionUrl);
     } else {
       const entries = await kvs.list();
-      let tableRows;
-      if (entries.length === 0) {
-        tableRows = '<tr class="empty-state"><td colspan="3">No Mastodon Servers Saved.</td></tr>';
-      } else {
-        tableRows = entries.map(f => `
-          <tr>
-            <td class="id-col">${f.key}</td>
-            <td><strong>${f.name}</strong></td>
-            <td class="actions">
-              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/status/home?key=${authKey}" 
-                 class="download-link action-link primary" 
-                 target="_blank">Home</a>
-              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/status/local?key=${authKey}" 
-                 class="download-link action-link" 
-                 target="_blank">Local</a>
-              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/status/user?key=${authKey}" 
-                 class="download-link action-link" 
-                 target="_blank">User</a>
-              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/notifications?key=${authKey}" 
-                 class="download-link action-link" 
-                 target="_blank">Notifications</a>
-              <a href="${Endpoint.masto}${encodeURIComponent(f.key)}/delete?key=${authKey}" 
-                 class="download-link action-link delete" 
-                 onclick="return confirm('Are you sure you want to delete ${f.name}?');">Delete</a>
-            </td>
-          </tr>
-        `).join('');
-      }
-
-      const fileTable = `
-        <h3>Stored Mastodon Servers</h3>
-        <table>
-          <thead>
-            <tr>
-              <th style="width: 30%;">ID</th>
-              <th>Server</th>
-              <th style="text-align: right;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>${tableRows}</tbody>
-        </table>
-      `;
-
-      content = `
-        <h2>RSS THE PLANET: Mastodon</h2>
-        <p>Save your Mastodon server and API key to convert your timeline to RSS.</p>
-        <form id="masto-form" action="${actionUrl}" method="POST">
-          <p>
-            <label for="key">API Key (if not in URL):</label>
-            <div class="input-group">
-              <input type="text" id="key" name="key" value="${key}" oninput="updateAction()">
-              <button type="button" class="secondary" onclick="window.location.href='${Endpoint.masto}?key=' + encodeURIComponent(document.getElementById('key').value)">Update</button>
-            </div>
-          </p>
-          <p>
-            <label for="server">Mastodon Server URL:</label>
-            <input type="text" id="server" name="server" placeholder="https://mastodon.social" required>
-          </p>
-          <p>
-            <label for="apiKey">Mastodon API Key:</label>
-            <input type="text" id="apiKey" name="apiKey" placeholder="Your Mastodon Access Token" required>
-          </p>
-          <p>
-            <button type="submit">Save Credentials</button>
-          </p>
-        </form>
-        ${fileTable}
-      `;
+      const rows = this.renderServerRows(entries, authKey);
+      content = UI.renderDashboardForm(key, actionUrl, rows);
     }
+    return new Response(renderLayout('RSS THE PLANET: Mastodon', content, headExtras), { headers: { 'Content-Type': 'text/html' }, status: 200 });
+  }
 
-    return new Response(renderLayout('RSS THE PLANET: Mastodon', content, headExtras), {
-      headers: { 'Content-Type': 'text/html' },
-      status: 200
-    });
+  renderServerRows(entries, authKey) {
+    if (entries.length === 0) return '<tr class="empty-state"><td colspan="3">No Mastodon Servers Saved.</td></tr>';
+    return entries.map(f => UI.renderServerTableRow(f, authKey)).join('');
   }
 }
