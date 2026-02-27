@@ -27,7 +27,12 @@ jobs:
       - name: Create Test Results Directory
         run: mkdir -p test-results
 
-      # 2. Run Node Tests
+      # 2. Run Linting
+      - name: Run ESLint
+        continue-on-error: true
+        run: npm run lint
+
+      # 3. Run Node Tests
       # Only do Fast and Medium tests in node so we don't kill the W3C server
       # Wrangler will do the Full Slow Test
       - name: Node Fast and Medium
