@@ -196,6 +196,46 @@ describe('YouTube Service Integration', () => {
     expect(body).toContain('👍 10');
   });
 
+  it('should generate OPML for all playlists', async () => {
+    Auth.load(env);
+    const kvsMap = env.RSS_THE_PLANET_KVS;
+    kvsMap.set('test-uuid-opml', new KVSValue(
+      'test-uuid-opml', 
+      'test@example.com', 
+      JSON.stringify({ refresh_token: 'mock-refresh', email: 'test@example.com' }), 
+      'YOUTUBE', 
+      'test-key'
+    ));
+
+    global.fetch = vi.fn().mockImplementation((url) => {
+      const urlStr = url.toString();
+      if (urlStr === mockConfig.web.token_uri) {
+        return Promise.resolve(new Response(JSON.stringify({ access_token: 'new-access' }), { status: 200 }));
+      }
+      if (urlStr.includes('youtube/v3/playlists')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [
+            { id: 'pl1', snippet: { title: 'Playlist 1' } },
+            { id: 'pl2', snippet: { title: 'Playlist 2' } }
+          ]
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('', { status: 404 }));
+    });
+
+    const req = createRequest(Endpoint.youtube + 'test-uuid-opml/opml?key=test-key');
+    const service = new YouTubeService(req, env, {});
+    const res = await service.handleRequest();
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('text/x-opml');
+    expect(res.headers.get('Content-Disposition')).toContain('filename="test-example.com-playlists.opml"');
+    const body = await res.text();
+    expect(body).toContain('<opml');
+    expect(body).toContain('xmlUrl="http://localhost:3000/youtube/test-uuid-opml/playlist/pl1/feed?key=test-key"');
+    expect(body).toContain('xmlUrl="http://localhost:3000/youtube/test-uuid-opml/playlist/pl2/feed?key=test-key"');
+  });
+
   it('should render the dashboard when authorized', async () => {
     Auth.load(env);
     // Seed KVS with an account

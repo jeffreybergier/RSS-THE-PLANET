@@ -36,6 +36,10 @@ export const renderAccountTableRow = (f, authKey) => `
          class="download-link action-link primary" 
          data-id="${f.key}"
          data-action="playlists">View Playlists</a>
+      <a href="${Endpoint.youtube}${encodeURIComponent(f.key)}/opml?key=${authKey}" 
+         class="download-link action-link" 
+         data-id="${f.key}"
+         data-action="opml">OPML</a>
       <a href="${Endpoint.youtube}${encodeURIComponent(f.key)}/delete?key=${authKey}" 
          class="download-link action-link delete" 
          data-id="${f.key}"

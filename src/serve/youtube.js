@@ -61,10 +61,63 @@ export class YouTubeService extends Service {
     if (this.action === 'auth') return this.redirectToGoogle();
     if (this.action === 'delete') return await this.handleDelete();
     if (this.action === 'playlists') return await this.viewPlaylists();
+    if (this.action === 'opml') return await this.getOPML();
     if (this.action === 'playlist' && this.playlistId && this.feedAction === 'feed') {
       return await this.getPlaylistRSS();
     }
     return await this.getSubmitForm();
+  }
+
+  async getOPML() {
+    if (!this.authKey || !this.kvs) return renderError(401, 'Unauthorized', this.requestURL.pathname);
+    const entry = await this.kvs.get(this.uuid);
+    if (!entry) return renderError(404, 'Account not found', this.requestURL.pathname);
+    const data = JSON.parse(entry.value);
+
+    try {
+      const token = await this.getAccessToken(data.refresh_token);
+      const playlists = await this.fetchYouTubePlaylists(token);
+      const opml = this.convertPlaylistsToOPML(playlists, data.email);
+      const encoded = new TextEncoder().encode(opml);
+      
+      const emailPart = (data.email || 'youtube').replace(/@/g, '-');
+      const filename = `${emailPart}-playlists.opml`;
+
+      return new Response(encoded, {
+        headers: {
+          'Content-Type': 'text/x-opml',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Content-Length': encoded.byteLength.toString()
+        }
+      });
+    } catch (e) {
+      console.error(`[YouTubeService.getOPML] error: ${e.message}`);
+      return renderError(502, 'Failed to generate OPML', this.requestURL.pathname);
+    }
+  }
+
+  convertPlaylistsToOPML(playlists, email) {
+    const outlines = playlists.map(p => {
+      const rssUrl = `${this.requestURL.origin}${Endpoint.youtube}${encodeURIComponent(this.uuid)}/playlist/${p.id}/feed?key=${this.authKey}`;
+      return {
+        '@_text': p.snippet.title,
+        '@_title': p.snippet.title,
+        '@_type': 'rss',
+        '@_xmlUrl': rssUrl,
+        '@_htmlUrl': `https://www.youtube.com/playlist?list=${p.id}`
+      };
+    });
+
+    const opmlObj = {
+      '?xml': { '@_version': '1.0', '@_encoding': 'UTF-8' },
+      opml: {
+        '@_version': '2.0',
+        head: { title: `Youtube (${email || 'YouTube'})` },
+        body: { outline: outlines }
+      }
+    };
+
+    return new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: '@_', format: true }).build(opmlObj);
   }
 
   getGoogleConfig() {
@@ -118,6 +171,7 @@ export class YouTubeService extends Service {
       const head = renderUpdateActionScript(Endpoint.youtube);
       return new Response(renderLayout('RSS: Playlists', UI.renderPlaylistTable(this.uuid, playlists, this.authKey), head), { headers: { 'Content-Type': 'text/html' } });
     } catch (e) {
+      console.error(`[YouTubeService.viewPlaylists] error: ${e.message}`);
       return renderError(502, 'Failed to fetch playlists', this.requestURL.pathname);
     }
   }
