@@ -40,7 +40,7 @@ export class ProxyService extends Service {
 
       // 3. Check that we are authorized
       if (!this.authKey) {
-        return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
+        return renderError(401, 'The key parameter was missing or incorrect', this.requestURL.pathname);
       }
 
       // 4. Automatically determine option if needed
@@ -54,7 +54,7 @@ export class ProxyService extends Service {
       if (_submittedURL) return await this.getSubmitResult();
 
       if (!this.option) {
-        return renderError(502, "The target could not be reached", this.targetURL.pathname);
+        return renderError(502, 'The target could not be reached', this.targetURL.pathname);
       }
 
       // 6. Go through the options and service them
@@ -63,10 +63,10 @@ export class ProxyService extends Service {
       if (this.option === Option.image) return this.getImage();
       if (this.option === Option.html) return this.getHTML();
       
-      return renderError(400, "Invalid proxy option requested", this.requestURL.pathname);
+      return renderError(400, 'Invalid proxy option requested', this.requestURL.pathname);
     } catch (error) {
       console.error(`[ProxyService.handleRequest] Internal Error: ${error.message}`);
-      return renderError(500, "An internal server error occurred", this.requestURL.pathname);
+      return renderError(500, 'An internal server error occurred', this.requestURL.pathname);
     }
   }
 
@@ -102,8 +102,8 @@ export class ProxyService extends Service {
         </p>
       </form>
     `;
-    return new Response(renderLayout("RSS THE PLANET: Proxy", content), {
-      headers: { "Content-Type": "text/html" },
+    return new Response(renderLayout('RSS THE PLANET: Proxy', content), {
+      headers: { 'Content-Type': 'text/html' },
       status: 200
     });
   }
@@ -112,14 +112,14 @@ export class ProxyService extends Service {
     if (!(this.targetURL instanceof URL) 
      || !(this.baseURL instanceof URL) 
      || !this.authKey) 
-    { throw new Error("Parameter Error: submittedURL, baseURL, authKey"); }
+    { throw new Error('Parameter Error: submittedURL, baseURL, authKey'); }
     const encodedURL = Codec.encode(this.targetURL, this.option, this.baseURL, this.authKey);
     const bodyContent = `${encodedURL.toString()}`;
     const encodedBody = new TextEncoder().encode(bodyContent);
     return new Response(encodedBody, {
       headers: { 
-        "Content-Type": "text/plain",
-        "Content-Length": encodedBody.byteLength.toString()
+        'Content-Type': 'text/plain',
+        'Content-Length': encodedBody.byteLength.toString()
       },
       status: 200
     });
@@ -130,11 +130,11 @@ export class ProxyService extends Service {
      || !(this.baseURL instanceof URL)
      || !this.requestHeaders
      || !this.requestMethod
-     || typeof this.authKey !== "string") 
-     { throw new Error("Parameter Error: targetURL, baseURL, requestHeaders, requestMethod, authKey"); }
+     || typeof this.authKey !== 'string') 
+    { throw new Error('Parameter Error: targetURL, baseURL, requestHeaders, requestMethod, authKey'); }
     
     let requestHeaders = ProxyService.sanitizedRequestHeaders(this.requestHeaders);
-    if (this.requestMethod !== "GET") {
+    if (this.requestMethod !== 'GET') {
       // Bail out immediately if we are 
       // not proxying a normal GET request
       return fetch(this.targetURL, {
@@ -174,7 +174,7 @@ export class ProxyService extends Service {
       });
     } catch (error) {
       console.error(`[ProxyService.feed] fetch() ${error.message}`);
-      return renderError(502, "The target could not be reached", this.targetURL.pathname);
+      return renderError(502, 'The target could not be reached', this.targetURL.pathname);
     }
   }
 
@@ -183,11 +183,11 @@ export class ProxyService extends Service {
      || !(this.baseURL instanceof URL)
      || !this.requestHeaders
      || !this.requestMethod
-     || typeof this.authKey !== "string") 
-     { throw new Error("Parameter Error: targetURL, baseURL, requestHeaders, requestMethod, authKey"); }
+     || typeof this.authKey !== 'string') 
+    { throw new Error('Parameter Error: targetURL, baseURL, requestHeaders, requestMethod, authKey'); }
     
     let requestHeaders = ProxyService.sanitizedRequestHeaders(this.requestHeaders);
-    if (this.requestMethod !== "GET") {
+    if (this.requestMethod !== 'GET') {
       // Bail out immediately if we are 
       // not proxying a normal GET request
       return fetch(this.targetURL, {
@@ -215,7 +215,7 @@ export class ProxyService extends Service {
       });
     } catch (error) {
       console.error(`[ProxyService.html] error: ${error.message}`);
-      return renderError(502, "The target could not be reached", this.targetURL.pathname);
+      return renderError(502, 'The target could not be reached', this.targetURL.pathname);
     }
   }
 
@@ -223,8 +223,8 @@ export class ProxyService extends Service {
     if (!(this.targetURL instanceof URL)
      || !this.requestHeaders
      || !this.requestMethod
-     || typeof this.authKey !== "string") 
-    { throw new Error("Parameter Error: targetURL, requestHeaders, requestMethod, authKey"); }
+     || typeof this.authKey !== 'string') 
+    { throw new Error('Parameter Error: targetURL, requestHeaders, requestMethod, authKey'); }
     
     const headers = ProxyService.sanitizedRequestHeaders(this.requestHeaders);
     console.log(`[ProxyService.asset] passing through: ${this.targetURL.toString()}`);
@@ -241,20 +241,20 @@ export class ProxyService extends Service {
     if (!(this.targetURL instanceof URL)
      || !this.requestHeaders
      || !this.requestMethod
-     || typeof this.authKey !== "string") 
-    { throw new Error("Parameter Error: targetURL, requestHeaders, requestMethod, authKey"); }
+     || typeof this.authKey !== 'string') 
+    { throw new Error('Parameter Error: targetURL, requestHeaders, requestMethod, authKey'); }
     
     const headers = ProxyService.sanitizedRequestHeaders(this.requestHeaders);
     
     // Image Resizing with Cloudflare
-    const wsrvURL = new URL("https://wsrv.nl/");
-    wsrvURL.searchParams.set("url", this.targetURL.toString());
-    wsrvURL.searchParams.set("w", "1024");
-    wsrvURL.searchParams.set("h", "1024");
-    wsrvURL.searchParams.set("fit", "inside");
-    wsrvURL.searchParams.set("we", "1");    // Don't enlarge smaller images
-    wsrvURL.searchParams.set("output", "jpg");
-    wsrvURL.searchParams.set("q", "75");
+    const wsrvURL = new URL('https://wsrv.nl/');
+    wsrvURL.searchParams.set('url', this.targetURL.toString());
+    wsrvURL.searchParams.set('w', '1024');
+    wsrvURL.searchParams.set('h', '1024');
+    wsrvURL.searchParams.set('fit', 'inside');
+    wsrvURL.searchParams.set('we', '1');    // Don't enlarge smaller images
+    wsrvURL.searchParams.set('output', 'jpg');
+    wsrvURL.searchParams.set('q', '75');
     console.log(`[ProxyService.image] resizing via wsrv.nl: ${this.targetURL.toString()}`);
     
     return fetch(wsrvURL, {
@@ -266,17 +266,17 @@ export class ProxyService extends Service {
 
     const XML_rewriteEntryHTML = async (entry) => {
       const fields = [
-        "description",       // RSS 2.0 Summary/Content
-        "content:encoded",   // RSS 2.0 Full Content
-        "content",           // Atom Full Content
-        "summary"            // Atom Summary
+        'description',       // RSS 2.0 Summary/Content
+        'content:encoded',   // RSS 2.0 Full Content
+        'content',           // Atom Full Content
+        'summary'            // Atom Summary
       ];
       for (const field of fields) {
         if (!entry[field]) continue;
-        const isCDATA = (typeof entry[field] === "object" && entry[field]["__cdata"]) ;
-        const originalHTML = isCDATA ? entry[field]["__cdata"] : entry[field]
+        const isCDATA = (typeof entry[field] === 'object' && entry[field]['__cdata']) ;
+        const originalHTML = isCDATA ? entry[field]['__cdata'] : entry[field];
         let rewrittenHTML = await this.rewriteHTMLString(originalHTML);
-        if (isCDATA) entry[field]["__cdata"] = rewrittenHTML;
+        if (isCDATA) entry[field]['__cdata'] = rewrittenHTML;
         else entry[field] = rewrittenHTML;
       }
     };
@@ -292,35 +292,35 @@ export class ProxyService extends Service {
       const target = parent[key];
       if (!target) return;
       if (where && !where(parent)) return;
-      const rawValue = (typeof target === "object" && target.__cdata) ? target.__cdata : target;
-      if (typeof rawValue !== "string") return;
+      const rawValue = (typeof target === 'object' && target.__cdata) ? target.__cdata : target;
+      if (typeof rawValue !== 'string') return;
       const rawURL = URL.parse(rawValue.trim());
       if (!rawURL) return;
       const finalURL = Codec.encode(rawURL, option, this.baseURL, this.authKey);
       const finalURLString = finalURL.toString();
-      parent[key] = (typeof target === "object" && "__cdata" in target) 
-                  ? { "__cdata": finalURLString } 
-                  : finalURLString;
+      parent[key] = (typeof target === 'object' && '__cdata' in target) 
+        ? { '__cdata': finalURLString } 
+        : finalURLString;
     };
     
     if (!(this.baseURL instanceof URL)
-     || typeof originalXML !== "string"
-     || typeof this.authKey !== "string") 
-    { throw new Error("Parameter Error: baseURL, originalXML, authKey"); }
+     || typeof originalXML !== 'string'
+     || typeof this.authKey !== 'string') 
+    { throw new Error('Parameter Error: baseURL, originalXML, authKey'); }
     
     // 1. Create Parser and Builder
     const parser = new XMLParser({ 
       ignoreAttributes: false, 
-      attributeNamePrefix: "@_",
+      attributeNamePrefix: '@_',
       parseTagValue: false,
-      cdataPropName: "__cdata"
+      cdataPropName: '__cdata'
     });
     const builder = new XMLBuilder({ 
       ignoreAttributes: false, 
       format: false,
       suppressBooleanAttributes: false,
       suppressEmptyNode: true,
-      cdataPropName: "__cdata"
+      cdataPropName: '__cdata'
     });
     
     // 2. Start Processing
@@ -329,24 +329,24 @@ export class ProxyService extends Service {
     // So only the critical itunes ones get the heavy treatment
     const maxEntries = 30;
     let xml = parser.parse(originalXML);
-    if (xml["?xml-stylesheet"]) delete xml["?xml-stylesheet"]; // Delete any stylesheet
+    if (xml['?xml-stylesheet']) delete xml['?xml-stylesheet']; // Delete any stylesheet
     
     // 3 Patch the Atom Channel
     const rssChannel = xml.rss?.channel;
     if (rssChannel) {
       // 3.1 Delete itunes:new-feed-url
-      delete rssChannel["itunes:new-feed-url"];
+      delete rssChannel['itunes:new-feed-url'];
       // 3.2 Replace itunes:image
-      await XML_encodeURL(rssChannel["itunes:image"], "@_href", Option.image);
+      await XML_encodeURL(rssChannel['itunes:image'], '@_href', Option.image);
       // 3.3 Replace Links
-      await XML_encodeURL(rssChannel, "link", Option.auto);
+      await XML_encodeURL(rssChannel, 'link', Option.auto);
       // 3.4 Replace Self Link
-      await XML_encodeURL(rssChannel["atom:link"], "@_href", Option.feed, item => {
-        return item["@_rel"] === "self";
+      await XML_encodeURL(rssChannel['atom:link'], '@_href', Option.feed, item => {
+        return item['@_rel'] === 'self';
       });
       // 3.5 Replace the channel image
-      await XML_encodeURL(rssChannel.image, "url", Option.image);
-      await XML_encodeURL(rssChannel.image, "link", Option.auto);
+      await XML_encodeURL(rssChannel.image, 'url', Option.image);
+      await XML_encodeURL(rssChannel.image, 'link', Option.auto);
       
       // 4 Patch each item in the channel
       // 4.1 Limit to maxEntries
@@ -359,13 +359,13 @@ export class ProxyService extends Service {
       }
       for (const item of rssChannel.item) {
         // 4.2 Replace the Link property
-        await XML_encodeURL(item, "link", Option.auto);
+        await XML_encodeURL(item, 'link', Option.auto);
         // 4.3 Replace the itunes image url
-        await XML_encodeURL(item["itunes:image"], "@_href", Option.image);
+        await XML_encodeURL(item['itunes:image'], '@_href', Option.image);
         // 4.4 Replace enclosure url
-        await XML_encodeURL(item.enclosure, "@_url", Option.asset);
+        await XML_encodeURL(item.enclosure, '@_url', Option.asset);
         // 4.5 Replace media:content
-        await XML_encodeURL(item["media:content"], "@_url", Option.asset);
+        await XML_encodeURL(item['media:content'], '@_url', Option.asset);
         // 4.6 Rewrite the HTML in summaries and descriptions
         await XML_rewriteEntryHTML(item);
       }
@@ -375,26 +375,26 @@ export class ProxyService extends Service {
     if (rssFeed) {
       // 5.1 Proxy all of the link references
       if (!Array.isArray(rssFeed.link)) rssFeed.link = (rssFeed.link) 
-                                                     ? [rssFeed.link] 
-                                                     : [];
+        ? [rssFeed.link] 
+        : [];
       for (const link of rssFeed.link) {
-        const linkURL = URL.parse(link["@_href"]);
+        const linkURL = URL.parse(link['@_href']);
         if (!linkURL) continue;
         let option = Option.auto;
-        if (link["@_type"]?.toLowerCase().includes("html" )) option = Option.html;
-        if (link["@_type"]?.toLowerCase().includes("xml"  )) option = Option.feed;
-        if (link["@_type"]?.toLowerCase().includes("rss"  )) option = Option.feed;
-        if (link["@_type"]?.toLowerCase().includes("atom" )) option = Option.feed;
-        if (link["@_type"]?.toLowerCase().includes("audio")) option = Option.asset;
-                if (link["@_type" ]?.toLowerCase().includes("image")) option = Option.image;
-                if (link["@_rel" ]?.toLowerCase().includes("self" )) option = Option.feed;
-                link["@_href"] = Codec.encode(linkURL, option, this.baseURL, this.authKey).toString();
+        if (link['@_type']?.toLowerCase().includes('html' )) option = Option.html;
+        if (link['@_type']?.toLowerCase().includes('xml'  )) option = Option.feed;
+        if (link['@_type']?.toLowerCase().includes('rss'  )) option = Option.feed;
+        if (link['@_type']?.toLowerCase().includes('atom' )) option = Option.feed;
+        if (link['@_type']?.toLowerCase().includes('audio')) option = Option.asset;
+        if (link['@_type' ]?.toLowerCase().includes('image')) option = Option.image;
+        if (link['@_rel' ]?.toLowerCase().includes('self' )) option = Option.feed;
+        link['@_href'] = Codec.encode(linkURL, option, this.baseURL, this.authKey).toString();
         
       }
       
       // 5.2 replace logo and icon which are in the spec
-      await XML_encodeURL(rssFeed, "logo", Option.image);
-      await XML_encodeURL(rssFeed, "icon", Option.image);
+      await XML_encodeURL(rssFeed, 'logo', Option.image);
+      await XML_encodeURL(rssFeed, 'icon', Option.image);
       
       // 6 Correct all of the entries
       
@@ -410,20 +410,20 @@ export class ProxyService extends Service {
       // 6.2 Patch each link entry
       for (const entry of rssFeed.entry) {
         if (!Array.isArray(entry.link)) entry.link = (entry.link) 
-                                                   ? [entry.link] 
-                                                   : [];
+          ? [entry.link] 
+          : [];
                                                    
         for (const link of entry.link) {
-          const linkURL = URL.parse(link["@_href"]);
+          const linkURL = URL.parse(link['@_href']);
           if (!linkURL) continue;
           let option = Option.auto;
-          if (link["@_type"]?.toLowerCase().includes("html" )) option = Option.html;
-          if (link["@_type"]?.toLowerCase().includes("xml"  )) option = Option.feed;
-          if (link["@_type"]?.toLowerCase().includes("rss"  )) option = Option.feed;
-          if (link["@_type"]?.toLowerCase().includes("atom" )) option = Option.feed;
-          if (link["@_type"]?.toLowerCase().includes("audio")) option = Option.asset;
-          if (link["@_type"]?.toLowerCase().includes("image")) option = Option.image;
-          link["@_href"] = Codec.encode(linkURL, option, this.baseURL, this.authKey).toString();
+          if (link['@_type']?.toLowerCase().includes('html' )) option = Option.html;
+          if (link['@_type']?.toLowerCase().includes('xml'  )) option = Option.feed;
+          if (link['@_type']?.toLowerCase().includes('rss'  )) option = Option.feed;
+          if (link['@_type']?.toLowerCase().includes('atom' )) option = Option.feed;
+          if (link['@_type']?.toLowerCase().includes('audio')) option = Option.asset;
+          if (link['@_type']?.toLowerCase().includes('image')) option = Option.image;
+          link['@_href'] = Codec.encode(linkURL, option, this.baseURL, this.authKey).toString();
         }
         
         // 6.3 Rewrite the HTML in summaries and descriptions
@@ -523,8 +523,8 @@ export class ProxyService extends Service {
               const url = parts[0];
               // Parse width (e.g., "1080w" -> 1080). Default to 0 if not found.
               const width = parts[1] && parts[1].endsWith('w') 
-                            ? parseInt(parts[1].slice(0, -1), 10) 
-                            : 0;
+                ? parseInt(parts[1].slice(0, -1), 10) 
+                : 0;
               return { url, width };
             });
       
@@ -570,7 +570,7 @@ export class ProxyService extends Service {
       'transfer-encoding',
       'upgrade',
       'content-length',
-       // TODO: Debugging
+      // TODO: Debugging
       'if-none-match',
       'if-modified-since',
     ];

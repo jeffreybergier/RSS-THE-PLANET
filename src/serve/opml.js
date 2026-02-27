@@ -4,7 +4,7 @@ import { Codec } from '../lib/codec.js';
 import { Option } from '../lib/option.js';
 import { renderError } from '../ui/error.js';
 import { renderLayout } from '../ui/theme.js';
-import { KVSAdapter, KVSValue, KVSMeta } from '../adapt/kvs.js';
+import { KVSAdapter, KVSValue } from '../adapt/kvs.js';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 
 // MARK: OPMLService Class
@@ -22,7 +22,7 @@ export class OPMLService extends Service {
     this.authKey = null;
 
     const pathComponents = this.requestURL.pathname.split('/');
-    const opmlIndex = pathComponents.indexOf("opml");
+    const opmlIndex = pathComponents.indexOf('opml');
     if (opmlIndex !== -1 && pathComponents[opmlIndex + 1]) {
       this.uuid = pathComponents[opmlIndex + 1];
       this.action = pathComponents[opmlIndex + 2] || null;
@@ -35,10 +35,10 @@ export class OPMLService extends Service {
     try {
       this.authKey = await Auth.validate(this.request);
       if (this.authKey) {
-        this.kvs = new KVSAdapter(this.env, "OPML", this.authKey);
+        this.kvs = new KVSAdapter(this.env, 'OPML', this.authKey);
       }
 
-      if (this.request.method === "POST") {
+      if (this.request.method === 'POST') {
         return await this.handlePost();
       }
       
@@ -56,17 +56,17 @@ export class OPMLService extends Service {
       return await this.getSubmitForm();
     } catch (error) {
       console.error(`[OPMLService.handleRequest] Internal Error: ${error.message}`);
-      return renderError(500, "An internal server error occurred", this.requestURL.pathname);
+      return renderError(500, 'An internal server error occurred', this.requestURL.pathname);
     }
   }
 
   async handleDelete() {
     if (!this.authKey || !this.kvs) {
-      return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
+      return renderError(401, 'The key parameter was missing or incorrect', this.requestURL.pathname);
     }
     const id = this.uuid;
     if (!id) {
-      return renderError(400, "File ID is required", this.requestURL.pathname);
+      return renderError(400, 'File ID is required', this.requestURL.pathname);
     }
 
     // Attempt delete (adapter handles ownership check)
@@ -76,30 +76,30 @@ export class OPMLService extends Service {
       console.error(`[OPMLService.handleDelete] Error: ${e.message}`);
       // We might want to return an error, or just redirect if it was already gone/unauthorized
       // For security, treating unauthorized delete as silent or generic error is often better.
-      return renderError(400, "Could not delete file", this.requestURL.pathname);
+      return renderError(400, 'Could not delete file', this.requestURL.pathname);
     }
 
     // Redirect back to the list
     return new Response(null, {
       status: 302,
       headers: {
-        "Location": `${Endpoint.opml}?key=${this.authKey}`
+        'Location': `${Endpoint.opml}?key=${this.authKey}`
       }
     });
   }
 
   async handleConvert() {
     if (!this.authKey) {
-      return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
+      return renderError(401, 'The key parameter was missing or incorrect', this.requestURL.pathname);
     }
     const id = this.uuid;
     if (!id) {
-      return renderError(400, "File ID is required", this.requestURL.pathname);
+      return renderError(400, 'File ID is required', this.requestURL.pathname);
     }
 
     const entry = await this.kvs.get(id);
     if (!entry) {
-      return renderError(404, "File not found or unauthorized", this.requestURL.pathname);
+      return renderError(404, 'File not found or unauthorized', this.requestURL.pathname);
     }
 
     const name = entry.name;
@@ -107,15 +107,15 @@ export class OPMLService extends Service {
 
     const rewrittenOpml = this.rewriteOPML(content, this.authKey);
     if (!rewrittenOpml) {
-      return renderError(500, "Failed to rewrite OPML", this.requestURL.pathname);
+      return renderError(500, 'Failed to rewrite OPML', this.requestURL.pathname);
     }
 
     const encodedOPML = new TextEncoder().encode(rewrittenOpml);
     return new Response(encodedOPML, {
       headers: {
-        "Content-Type": "text/x-opml",
-        "Content-Disposition": `attachment; filename="proxied_${name}"`,
-        "Content-Length": encodedOPML.byteLength.toString()
+        'Content-Type': 'text/x-opml',
+        'Content-Disposition': `attachment; filename="proxied_${name}"`,
+        'Content-Length': encodedOPML.byteLength.toString()
       },
       status: 200
     });
@@ -123,16 +123,16 @@ export class OPMLService extends Service {
 
   async handleDownload() {
     if (!this.authKey) {
-      return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
+      return renderError(401, 'The key parameter was missing or incorrect', this.requestURL.pathname);
     }
     const id = this.uuid;
     if (!id) {
-      return renderError(400, "File ID is required", this.requestURL.pathname);
+      return renderError(400, 'File ID is required', this.requestURL.pathname);
     }
 
     const entry = await this.kvs.get(id);
     if (!entry) {
-      return renderError(404, "File not found or unauthorized", this.requestURL.pathname);
+      return renderError(404, 'File not found or unauthorized', this.requestURL.pathname);
     }
 
     const name = entry.name;
@@ -141,9 +141,9 @@ export class OPMLService extends Service {
     const encodedOPML = new TextEncoder().encode(content);
     return new Response(encodedOPML, {
       headers: {
-        "Content-Type": "text/x-opml",
-        "Content-Disposition": `attachment; filename="${name}"`,
-        "Content-Length": encodedOPML.byteLength.toString()
+        'Content-Type': 'text/x-opml',
+        'Content-Disposition': `attachment; filename="${name}"`,
+        'Content-Length': encodedOPML.byteLength.toString()
       },
       status: 200
     });
@@ -172,7 +172,7 @@ export class OPMLService extends Service {
       </script>
     `;
 
-    let content = '';
+    let content;
 
     if (!this.authKey) {
       content = `
@@ -190,9 +190,9 @@ export class OPMLService extends Service {
       `;
     } else {
       const entries = await this.kvs.list();
-      let tableRows = '';
+      let tableRows;
       if (entries.length === 0) {
-        tableRows = `<tr class="empty-state"><td colspan="3">No OPML Files Saved.</td></tr>`;
+        tableRows = '<tr class="empty-state"><td colspan="3">No OPML Files Saved.</td></tr>';
       } else {
         tableRows = entries.map(f => `
           <tr>
@@ -261,8 +261,8 @@ export class OPMLService extends Service {
       `;
     }
 
-    return new Response(renderLayout("RSS THE PLANET: OPML Rewriter", content, headExtras), {
-      headers: { "Content-Type": "text/html" },
+    return new Response(renderLayout('RSS THE PLANET: OPML Rewriter', content, headExtras), {
+      headers: { 'Content-Type': 'text/html' },
       status: 200
     });
   }
@@ -270,7 +270,7 @@ export class OPMLService extends Service {
   async handlePost() {
     // 1. Check that we are authorized
     if (!this.authKey) {
-      return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
+      return renderError(401, 'The key parameter was missing or incorrect', this.requestURL.pathname);
     }
 
     // 2. Get the data
@@ -279,14 +279,14 @@ export class OPMLService extends Service {
       formData = await this.request.formData();
     } catch (e) {
       console.error(`[OPMLService.handlePost] Error reading formData: ${e.message}`);
-      return new Response("Invalid form data", { status: 400 });
+      return new Response('Invalid form data', { status: 400 });
     }
 
     // 3. Get the OPML file
     const file = formData.get('opml');
     if (!file || typeof file === 'string' || file.size === 0) {
-      console.log(`[OPMLService.handlePost] No file provided`);
-      return new Response("No OPML file provided", { status: 400 });
+      console.log('[OPMLService.handlePost] No file provided');
+      return new Response('No OPML file provided', { status: 400 });
     }
 
     const opmlText = await file.text();
@@ -298,10 +298,10 @@ export class OPMLService extends Service {
       const filename = file.name || 'feeds.opml';
       
       // ID will be generated automatically if null is passed
-      const newEntry = new KVSValue(null, filename, opmlText, "OPML", this.authKey);
+      const newEntry = new KVSValue(null, filename, opmlText, 'OPML', this.authKey);
       const savedEntry = await this.kvs.put(newEntry);
       
-      if (!savedEntry) throw new Error("Failed to save OPML");
+      if (!savedEntry) throw new Error('Failed to save OPML');
       
       const content = `
         <h2>File Saved</h2>
@@ -311,8 +311,8 @@ export class OPMLService extends Service {
         <p><a href="${Endpoint.opml}${encodeURIComponent(savedEntry.key)}/convert?key=${this.authKey}">Download Proxied</a></p>
         <p><a href="${Endpoint.opml}?key=${this.authKey}">Back to OPML Rewriter</a></p>
       `;
-      return new Response(renderLayout("RSS THE PLANET: Saved", content), {
-        headers: { "Content-Type": "text/html" },
+      return new Response(renderLayout('RSS THE PLANET: Saved', content), {
+        headers: { 'Content-Type': 'text/html' },
         status: 200
       });
     }
@@ -320,15 +320,15 @@ export class OPMLService extends Service {
     // 5. Parse and Rewrite
     const rewrittenOpml = this.rewriteOPML(opmlText);
     if (!rewrittenOpml) {
-      return new Response("Invalid OPML/XML format", { status: 400 });
+      return new Response('Invalid OPML/XML format', { status: 400 });
     }
     
     const encodedOPML = new TextEncoder().encode(rewrittenOpml);
     return new Response(encodedOPML, {
       headers: {
-        "Content-Type": "text/x-opml",
-        "Content-Disposition": `attachment; filename="rewritten_${file.name || 'feeds.opml'}"`,
-        "Content-Length": encodedOPML.byteLength.toString()
+        'Content-Type': 'text/x-opml',
+        'Content-Disposition': `attachment; filename="rewritten_${file.name || 'feeds.opml'}"`,
+        'Content-Length': encodedOPML.byteLength.toString()
       }
     });
   }
@@ -338,12 +338,12 @@ export class OPMLService extends Service {
 
     const parser = new XMLParser({
       ignoreAttributes: false,
-      attributeNamePrefix: "@_",
+      attributeNamePrefix: '@_',
       preserveOrder: true
     });
     const builder = new XMLBuilder({
       ignoreAttributes: false,
-      attributeNamePrefix: "@_",
+      attributeNamePrefix: '@_',
       preserveOrder: true,
       format: true
     });
@@ -363,27 +363,27 @@ export class OPMLService extends Service {
         if (!tagName) continue;
 
         if (tagName === 'opml' || tagName === 'body' || tagName === 'outline') {
-            const children = node[tagName];
+          const children = node[tagName];
             
-            if (tagName === 'outline' && node[':@']) {
-                const attrs = node[':@'];
-                if (attrs['@_xmlUrl']) {
-                    const url = URL.parse(attrs['@_xmlUrl']);
-                    if (url) {
-                        attrs['@_xmlUrl'] = Codec.encode(url, Option.feed, this.baseURL, this.authKey).toString();
-                    }
-                }
-                if (attrs['@_htmlUrl']) {
-                    const url = URL.parse(attrs['@_htmlUrl']);
-                    if (url) {
-                        attrs['@_htmlUrl'] = Codec.encode(url, Option.auto, this.baseURL, this.authKey).toString();
-                    }
-                }
+          if (tagName === 'outline' && node[':@']) {
+            const attrs = node[':@'];
+            if (attrs['@_xmlUrl']) {
+              const url = URL.parse(attrs['@_xmlUrl']);
+              if (url) {
+                attrs['@_xmlUrl'] = Codec.encode(url, Option.feed, this.baseURL, this.authKey).toString();
+              }
             }
+            if (attrs['@_htmlUrl']) {
+              const url = URL.parse(attrs['@_htmlUrl']);
+              if (url) {
+                attrs['@_htmlUrl'] = Codec.encode(url, Option.auto, this.baseURL, this.authKey).toString();
+              }
+            }
+          }
 
-            if (Array.isArray(children)) {
-                processNode(children);
-            }
+          if (Array.isArray(children)) {
+            processNode(children);
+          }
         }
       }
     };

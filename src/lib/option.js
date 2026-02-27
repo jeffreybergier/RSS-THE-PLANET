@@ -1,9 +1,9 @@
 export const Option = {
-  auto:  "auto",
-  feed:  "feed",
-  html:  "html",
-  asset: "asset",
-  image: "image",
+  auto:  'auto',
+  feed:  'feed',
+  html:  'html',
+  asset: 'asset',
+  image: 'image',
   getOption(parameter) {
     if (typeof parameter !== 'string') return this.auto;
     const normalized = parameter.toLowerCase();
@@ -14,13 +14,13 @@ export const Option = {
     try {
       let response = await fetch(targetURL, { method: 'HEAD' });
       if (!response.ok) return null;
-      const contentType = response.headers.get("Content-Type") || "";
+      const contentType = response.headers.get('Content-Type') || '';
       console.log(`[Option] autodetected Content-Type: ${contentType}`);
-      if (contentType.includes("xml"))   return Option.feed; 
-      if (contentType.includes("rss"))   return Option.feed;
-      if (contentType.includes("atom"))  return Option.feed;
-      if (contentType.includes("html"))  return Option.html;
-      if (contentType.includes("image")) return Option.image;
+      if (contentType.includes('xml'))   return Option.feed; 
+      if (contentType.includes('rss'))   return Option.feed;
+      if (contentType.includes('atom'))  return Option.feed;
+      if (contentType.includes('html'))  return Option.html;
+      if (contentType.includes('image')) return Option.image;
       return Option.asset;
     } catch (e) {
       console.error(`[Option.getAuto] error: ${e.message}`);

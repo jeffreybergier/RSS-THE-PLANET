@@ -7,7 +7,7 @@ import { renderLayout } from './theme.js';
  * @param {string} [pathname] - The path where the error occurred
  * @returns {Response}
  */
-export function renderError(status, message, pathname = "") {
+export function renderError(status, message, pathname = '') {
   const title = getStatusTitle(status);
   
   const content = `
@@ -18,17 +18,17 @@ export function renderError(status, message, pathname = "") {
   `;
 
   return new Response(renderLayout(`${status} ${title}`, content), {
-    headers: { "Content-Type": "text/html" },
+    headers: { 'Content-Type': 'text/html' },
     status: status
   });
 }
 
 function getStatusTitle(status) {
   switch (status) {
-    case 401: return "Unauthorized";
-    case 404: return "Not Found";
-    case 500: return "Internal Server Error";
-    case 502: return "Target Unreachable";
-    default: return "Error";
+  case 401: return 'Unauthorized';
+  case 404: return 'Not Found';
+  case 500: return 'Internal Server Error';
+  case 502: return 'Target Unreachable';
+  default: return 'Error';
   }
 }

@@ -1,7 +1,7 @@
 export const Endpoint = {
-  proxy: "/proxy/",
-  opml: "/opml/",
-  masto: "/masto/"
+  proxy: '/proxy/',
+  opml: '/opml/',
+  masto: '/masto/'
 };
 
 export class Service {
@@ -11,8 +11,8 @@ export class Service {
    * @param {Request} request 
    * @returns {boolean|string} - Returns true or a route identifier if it can handle the request.
    */
-  static canHandle(request) {
-    throw new Error("canHandle(request) must be implemented by subclass");
+  static canHandle(_request) {
+    throw new Error('canHandle(request) must be implemented by subclass');
   }
 
   constructor(request, env, ctx) {
@@ -22,6 +22,6 @@ export class Service {
   }
 
   async handleRequest() {
-    throw new Error("handleRequest() must be implemented by subclass");
+    throw new Error('handleRequest() must be implemented by subclass');
   }
 }

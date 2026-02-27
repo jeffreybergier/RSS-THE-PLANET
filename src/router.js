@@ -21,5 +21,5 @@ export async function route(request, env, ctx) {
   }
 
   const pathname = new URL(request.url).pathname;
-  return renderError(404, "The requested resource was not found on this server.", pathname);
+  return renderError(404, 'The requested resource was not found on this server.', pathname);
 }

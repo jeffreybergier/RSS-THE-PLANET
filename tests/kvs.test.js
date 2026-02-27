@@ -11,7 +11,7 @@ describe('KVSAdapter', () => {
   let sha256;
 
   beforeEach(() => {
-    mockRequest = new Request("http://example.com");
+    mockRequest = new Request('http://example.com');
     mockEnv = {
       RSS_THE_PLANET_KVS: new Map(),
       ENCRYPTION_SECRET: 'test-secret'

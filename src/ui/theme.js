@@ -111,7 +111,7 @@ export const SHARED_CSS = `
 /**
  * Wraps content in a standard HTML layout.
  */
-export function renderLayout(title, content, headExtras = "") {
+export function renderLayout(title, content, headExtras = '') {
   return `
   <!DOCTYPE html>
   <html lang="en">

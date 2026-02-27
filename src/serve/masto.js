@@ -5,8 +5,25 @@ import { Option } from '../lib/option.js';
 import { renderError } from '../ui/error.js';
 import { renderLayout } from '../ui/theme.js';
 import { KVSAdapter, KVSValue } from '../adapt/kvs.js';
-import { XMLParser, XMLBuilder } from 'fast-xml-parser';
+import { XMLBuilder } from 'fast-xml-parser';
 import * as Crypto from '../adapt/crypto.js';
+
+const stripTags = (html) => {
+  if (!html) return '';
+  let result = '';
+  let inTag = false;
+  for (let i = 0; i < html.length; i++) {
+    const char = html[i];
+    if (char === '<') {
+      inTag = true;
+    } else if (char === '>') {
+      inTag = false;
+    } else if (!inTag) {
+      result += char;
+    }
+  }
+  return result;
+};
 
 // MARK: MastoService Class
 
@@ -25,7 +42,7 @@ export class MastoService extends Service {
     this.kvs = null;
 
     const pathComponents = this.requestURL.pathname.split('/');
-    const mastoIndex = pathComponents.indexOf("masto");
+    const mastoIndex = pathComponents.indexOf('masto');
     if (mastoIndex !== -1 && pathComponents[mastoIndex + 1]) {
       this.uuid = pathComponents[mastoIndex + 1];
       this.type = pathComponents[mastoIndex + 2] || null;
@@ -41,15 +58,15 @@ export class MastoService extends Service {
       if (authKey) {
         this.request.env = this.env;
         const sha256 = new Crypto.SHA256(this.request);
-        kvs = new KVSAdapter(this.env, "MASTO", authKey, sha256);
+        kvs = new KVSAdapter(this.env, 'MASTO', authKey, sha256);
       } else {
-        if (this.request.method === "POST") {
-           // Pass nulls to handlePost, it will handle the 401
-           return await this.handlePost(null, null); 
+        if (this.request.method === 'POST') {
+          // Pass nulls to handlePost, it will handle the 401
+          return await this.handlePost(null, null); 
         }
       }
 
-      if (this.request.method === "POST") {
+      if (this.request.method === 'POST') {
         return await this.handlePost(authKey, kvs);
       }
 
@@ -67,77 +84,77 @@ export class MastoService extends Service {
       return await this.getSubmitForm(authKey, kvs);
     } catch (error) {
       console.error(`[MastoService.handleRequest] error: ${error.message}`);
-      return renderError(500, "An internal server error occurred", this.requestURL.pathname);
+      return renderError(500, 'An internal server error occurred', this.requestURL.pathname);
     }
   }
 
   async handleDelete(authKey, kvs) {
     if (!authKey || !kvs) {
-      return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
+      return renderError(401, 'The key parameter was missing or incorrect', this.requestURL.pathname);
     }
     const id = this.uuid;
     if (!id) {
-      return renderError(400, "Entry ID is required", this.requestURL.pathname);
+      return renderError(400, 'Entry ID is required', this.requestURL.pathname);
     }
 
     try {
       await kvs.delete(id);
     } catch (e) {
       console.error(`[MastoService.handleDelete] error: ${e.message}`);
-      return renderError(400, "Could not delete entry", this.requestURL.pathname);
+      return renderError(400, 'Could not delete entry', this.requestURL.pathname);
     }
 
     return new Response(null, {
       status: 302,
       headers: {
-        "Location": `${Endpoint.masto}?key=${authKey}`
+        'Location': `${Endpoint.masto}?key=${authKey}`
       }
     });
   }
 
   async handleStatus(authKey, kvs) {
     if (!authKey || !kvs) {
-      return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
+      return renderError(401, 'The key parameter was missing or incorrect', this.requestURL.pathname);
     }
     if (!this.uuid || (!this.subtype && this.type !== 'notifications')) {
-      return renderError(400, "Invalid Request", this.requestURL.pathname);
+      return renderError(400, 'Invalid Request', this.requestURL.pathname);
     }
 
     const entry = await kvs.get(this.uuid);
     if (!entry) {
-      return renderError(404, "Mastodon credentials not found", this.requestURL.pathname);
+      return renderError(404, 'Mastodon credentials not found', this.requestURL.pathname);
     }
 
     const server = entry.name;
     const apiKey = entry.value;
 
     if (!apiKey) {
-      console.error("[MastoService] Decryption failed or API Key missing");
-      return renderError(500, "Could not decrypt credentials. Please re-save them.", this.requestURL.pathname);
+      console.error('[MastoService] Decryption failed or API Key missing');
+      return renderError(500, 'Could not decrypt credentials. Please re-save them.', this.requestURL.pathname);
     }
 
     const mode = this.type === 'notifications' ? 'notifications' : this.subtype;
-    let apiPath = "";
+    let apiPath;
     if (mode === 'home') {
-      apiPath = "/api/v1/timelines/home";
+      apiPath = '/api/v1/timelines/home';
     } else if (mode === 'local') {
-      apiPath = "/api/v1/timelines/public?local=true";
+      apiPath = '/api/v1/timelines/public?local=true';
     } else if (mode === 'user') {
       // Need ID. Fetch verify_credentials first.
-      const verifyUrl = new URL("/api/v1/accounts/verify_credentials", server);
+      const verifyUrl = new URL('/api/v1/accounts/verify_credentials', server);
       const verifyRes = await fetch(verifyUrl, {
-        headers: { "Authorization": `Bearer ${apiKey}` }
+        headers: { 'Authorization': `Bearer ${apiKey}` }
       });
       if (!verifyRes.ok) return verifyRes;
       const me = await verifyRes.json();
       apiPath = `/api/v1/accounts/${me.id}/statuses`;
     } else if (mode === 'notifications') {
       if (this.type !== 'notifications') {
-        return renderError(400, "Invalid Request Path", this.requestURL.pathname);
+        return renderError(400, 'Invalid Request Path', this.requestURL.pathname);
       }
-      apiPath = "/api/v1/notifications";
+      apiPath = '/api/v1/notifications';
     } else {
-      return renderError(400, "Invalid status type", this.requestURL.pathname);
+      return renderError(400, 'Invalid status type', this.requestURL.pathname);
     }
 
     let allStatuses = [];
@@ -152,7 +169,7 @@ export class MastoService extends Service {
       }
 
       const response = await fetch(apiUrl, {
-        headers: { "Authorization": `Bearer ${apiKey}` }
+        headers: { 'Authorization': `Bearer ${apiKey}` }
       });
 
       if (!response.ok) {
@@ -178,7 +195,7 @@ export class MastoService extends Service {
       allStatuses = allStatuses.slice(0, 100);
     }
 
-    let rss = "";
+    let rss;
     if (mode === 'notifications') {
       rss = this.convertNotificationsJSONtoRSS(allStatuses, authKey, server);
     } else {
@@ -188,23 +205,23 @@ export class MastoService extends Service {
 
     return new Response(encodedRSS, {
       headers: {
-        "Content-Type": "text/xml; charset=utf-8",
-        "Content-Length": encodedRSS.byteLength.toString(),
-        "Cache-Control": "public, max-age=600"
+        'Content-Type': 'text/xml; charset=utf-8',
+        'Content-Length': encodedRSS.byteLength.toString(),
+        'Cache-Control': 'public, max-age=600'
       }
     });
   }
 
   convertNotificationsJSONtoRSS(json, authKey, serverUrl) {
-    if (!Array.isArray(json)) return "";
+    if (!Array.isArray(json)) return '';
 
     const builder = new XMLBuilder({
       ignoreAttributes: false,
-      attributeNamePrefix: "@_",
+      attributeNamePrefix: '@_',
       format: true,
       suppressBooleanAttributes: false,
       suppressEmptyNode: true,
-      cdataPropName: "__cdata"
+      cdataPropName: '__cdata'
     });
 
     const hostname = new URL(serverUrl).hostname;
@@ -215,15 +232,15 @@ export class MastoService extends Service {
       const status = notif.status;
       const name = account.display_name || account.username;
       
-      let title = "";
-      let html = "";
+      let title;
+      let html;
       let url = status?.url || account.url;
 
       // Build Triggerer Signature
-      let proxiedAvatar = "";
+      let proxiedAvatar;
       try {
         proxiedAvatar = Codec.encode(new URL(account.avatar), Option.image, this.baseURL, authKey).toString();
-      } catch (e) {
+      } catch {
         proxiedAvatar = account.avatar;
       }
       const triggererSignature = `
@@ -240,66 +257,66 @@ export class MastoService extends Service {
       }
 
       switch (type) {
-        case 'mention':
-          title = `💬 Mention from ${name}`;
-          break;
-        case 'reblog':
-          title = `🔁 Boosted by ${name}`;
-          break;
-        case 'favourite':
-          title = `⭐ Favorited by ${name}`;
-          break;
-        case 'follow':
-          title = `👤 Followed by ${name}`;
-          break;
-        case 'follow_request':
-          title = `🔒 Follow request from ${name}`;
-          break;
-        case 'poll':
-          title = `🗳️ Poll finished: ${status?.content?.substring(0, 30)}...`;
-          break;
-        case 'status':
-          title = `🔔 Post from ${name}`;
-          break;
-        case 'update':
-          title = `📝 Post edited by ${name}`;
-          break;
-        default:
-          title = `🔔 ${type} from ${name}`;
+      case 'mention':
+        title = `💬 Mention from ${name}`;
+        break;
+      case 'reblog':
+        title = `🔁 Boosted by ${name}`;
+        break;
+      case 'favourite':
+        title = `⭐ Favorited by ${name}`;
+        break;
+      case 'follow':
+        title = `👤 Followed by ${name}`;
+        break;
+      case 'follow_request':
+        title = `🔒 Follow request from ${name}`;
+        break;
+      case 'poll':
+        title = `🗳️ Poll finished: ${status?.content?.substring(0, 30)}...`;
+        break;
+      case 'status':
+        title = `🔔 Post from ${name}`;
+        break;
+      case 'update':
+        title = `📝 Post edited by ${name}`;
+        break;
+      default:
+        title = `🔔 ${type} from ${name}`;
       }
 
       return {
         title: title,
         link: this.wrapBrutaldon(url),
         guid: {
-          "@_isPermaLink": "true",
-          "#text": `${notif.id}-${type}`
+          '@_isPermaLink': 'true',
+          '#text': `${notif.id}-${type}`
         },
         pubDate: new Date(notif.created_at).toUTCString(),
-        description: { "__cdata": html },
-        "dc:creator": this.formatAccountName(account, hostname),
-        "dc:language": status?.language || "en"
+        description: { '__cdata': html },
+        'dc:creator': this.formatAccountName(account, hostname),
+        'dc:language': status?.language || 'en'
       };
     });
 
     const instanceName = new URL(serverUrl).hostname;
     const channelTitle = `${instanceName} - Notifications`;
     const rssObj = {
-      "?xml": { "@_version": "1.0", "@_encoding": "UTF-8" },
+      '?xml': { '@_version': '1.0', '@_encoding': 'UTF-8' },
       rss: {
-        "@_version": "2.0",
-        "@_xmlns:content": "http://purl.org/rss/1.0/modules/content/",
-        "@_xmlns:dc": "http://purl.org/dc/elements/1.1/",
-        "@_xmlns:atom": "http://www.w3.org/2005/Atom",
-        "@_xmlns:sy": "http://purl.org/rss/1.0/modules/syndication/",
+        '@_version': '2.0',
+        '@_xmlns:content': 'http://purl.org/rss/1.0/modules/content/',
+        '@_xmlns:dc': 'http://purl.org/dc/elements/1.1/',
+        '@_xmlns:atom': 'http://www.w3.org/2005/Atom',
+        '@_xmlns:sy': 'http://purl.org/rss/1.0/modules/syndication/',
         channel: {
           title: channelTitle,
           link: serverUrl,
-          description: "RSS-THE-PLANET Mastodon Feed",
-          "sy:updatePeriod": "hourly",
-          "sy:updateFrequency": "1",
-          language: "en-us",
-          generator: "RSS-THE-PLANET",
+          description: 'RSS-THE-PLANET Mastodon Feed',
+          'sy:updatePeriod': 'hourly',
+          'sy:updateFrequency': '1',
+          language: 'en-us',
+          generator: 'RSS-THE-PLANET',
           item: items
         }
       }
@@ -309,15 +326,15 @@ export class MastoService extends Service {
   }
 
   convertJSONtoRSS(json, subtype, authKey, serverUrl) {
-    if (!Array.isArray(json)) return "";
+    if (!Array.isArray(json)) return '';
 
     const builder = new XMLBuilder({
       ignoreAttributes: false,
-      attributeNamePrefix: "@_",
+      attributeNamePrefix: '@_',
       format: true,
       suppressBooleanAttributes: false,
       suppressEmptyNode: true,
-      cdataPropName: "__cdata"
+      cdataPropName: '__cdata'
     });
 
     const hostname = new URL(serverUrl).hostname;
@@ -332,32 +349,32 @@ export class MastoService extends Service {
       const html = this.formatStatusContent(data, authKey, hostname);
 
       // 2. Generate a clean type-based title
-      let displayTitle = "";
+      let displayTitle;
       if (isReply) {
         const replyToAccount = data.mentions?.find(m => m.id === data.in_reply_to_account_id) || (data.in_reply_to_account_id === author.id ? author : null);
-        const target = replyToAccount ? (replyToAccount.display_name || replyToAccount.username) : "Post";
+        const target = replyToAccount ? (replyToAccount.display_name || replyToAccount.username) : 'Post';
         displayTitle = `↩️ to ${target}`;
       } else if (isBoost) {
         const booster = status.account;
         displayTitle = `🚀 by ${booster.display_name || booster.username}`;
       } else {
         const types = [];
-        const text = data.content?.replace(/<[^>]*>/g, '').trim() || "";
-        if (text.length > 0) types.push("💬");
+        const text = stripTags(data.content).trim();
+        if (text.length > 0) types.push('💬');
         
         const hasImages = data.media_attachments?.some(m => m.type === 'image');
         const hasVideos = data.media_attachments?.some(m => m.type === 'video' || m.type === 'gifv');
-        if (hasImages) types.push("📷");
-        if (hasVideos) types.push("📹");
+        if (hasImages) types.push('📷');
+        if (hasVideos) types.push('📹');
 
         const linkCount = (data.content?.match(/<a /g) || []).length;
         const mentionCount = (data.mentions || []).length;
         const tagCount = (data.tags || []).length;
         if (data.card || linkCount > (mentionCount + tagCount)) {
-          types.push("🔗");
+          types.push('🔗');
         }
 
-        const emojiTitle = types.join("・") || "💬";
+        const emojiTitle = types.join('・') || '💬';
         displayTitle = `${emojiTitle} from ${author.display_name || author.username}`;
       }
 
@@ -365,35 +382,35 @@ export class MastoService extends Service {
         title: displayTitle,
         link: this.wrapBrutaldon(data.url),
         guid: {
-          "@_isPermaLink": "true",
-          "#text": data.url
+          '@_isPermaLink': 'true',
+          '#text': data.url
         },
         pubDate: new Date(data.created_at).toUTCString(),
-        description: { "__cdata": html },
-        "dc:creator": this.formatAccountName(author, hostname),
-        "dc:language": data.language || "en"
+        description: { '__cdata': html },
+        'dc:creator': this.formatAccountName(author, hostname),
+        'dc:language': data.language || 'en'
       };
     });
 
     const instanceName = new URL(serverUrl).hostname;
     const channelTitle = `${instanceName} - ${subtype.charAt(0).toUpperCase() + subtype.slice(1)}`;
     const rssObj = {
-      "?xml": { "@_version": "1.0", "@_encoding": "UTF-8" },
+      '?xml': { '@_version': '1.0', '@_encoding': 'UTF-8' },
       rss: {
-        "@_version": "2.0",
-        "@_xmlns:content": "http://purl.org/rss/1.0/modules/content/",
-        "@_xmlns:dc": "http://purl.org/dc/elements/1.1/",
-        "@_xmlns:atom": "http://www.w3.org/2005/Atom",
-        "@_xmlns:sy": "http://purl.org/rss/1.0/modules/syndication/",
+        '@_version': '2.0',
+        '@_xmlns:content': 'http://purl.org/rss/1.0/modules/content/',
+        '@_xmlns:dc': 'http://purl.org/dc/elements/1.1/',
+        '@_xmlns:atom': 'http://www.w3.org/2005/Atom',
+        '@_xmlns:sy': 'http://purl.org/rss/1.0/modules/syndication/',
         channel: {
           title: channelTitle,
           link: serverUrl,
-          description: "RSS-THE-PLANET Mastodon Feed",
-          "sy:updatePeriod": "hourly",
-          "sy:updateFrequency": "1",
-          language: "en-us",
+          description: 'RSS-THE-PLANET Mastodon Feed',
+          'sy:updatePeriod': 'hourly',
+          'sy:updateFrequency': '1',
+          language: 'en-us',
           lastBuildDate: new Date().toUTCString(),
-          generator: "RSS-THE-PLANET",
+          generator: 'RSS-THE-PLANET',
           item: items
         }
       }
@@ -404,7 +421,7 @@ export class MastoService extends Service {
 
   async handlePost(authKey, kvs) {
     if (!authKey || !kvs) {
-      return renderError(401, "The key parameter was missing or incorrect", this.requestURL.pathname);
+      return renderError(401, 'The key parameter was missing or incorrect', this.requestURL.pathname);
     }
 
     let formData;
@@ -412,37 +429,37 @@ export class MastoService extends Service {
       formData = await this.request.formData();
     } catch (e) {
       console.error(`[MastoService.handlePost] error reading formData: ${e.message}`);
-      return new Response("Invalid form data", { status: 400 });
+      return new Response('Invalid form data', { status: 400 });
     }
 
     const server = formData.get('server');
     const apiKey = formData.get('apiKey');
 
     if (typeof server !== 'string' || server.length === 0 || typeof apiKey !== 'string' || apiKey.length === 0) {
-      return new Response("Server URL and API Key are required", { status: 400 });
+      return new Response('Server URL and API Key are required', { status: 400 });
     }
 
     try {
-      const newEntry = new KVSValue(null, server, apiKey, "MASTO", authKey);
+      const newEntry = new KVSValue(null, server, apiKey, 'MASTO', authKey);
       const savedEntry = await kvs.put(newEntry);
       
-      if (!savedEntry) throw new Error("Failed to save Mastodon credentials");
+      if (!savedEntry) throw new Error('Failed to save Mastodon credentials');
 
       return new Response(null, {
         status: 302,
         headers: {
-          "Location": `${Endpoint.masto}?key=${authKey}`
+          'Location': `${Endpoint.masto}?key=${authKey}`
         }
       });
     } catch (e) {
       console.error(`[MastoService.handlePost] error: ${e.message}`);
-      return renderError(500, "Failed to save credentials", this.requestURL.pathname);
+      return renderError(500, 'Failed to save credentials', this.requestURL.pathname);
     }
   }
 
   formatHandle(account, hostname) {
     if (!account) {
-      return "Unknown";
+      return 'Unknown';
     }
     const handle = account.acct.includes('@') ? account.acct : `${account.acct}@${hostname}`;
     return handle;
@@ -450,7 +467,7 @@ export class MastoService extends Service {
 
   formatAccountName(account, hostname) {
     if (!account) {
-      return "Unknown";
+      return 'Unknown';
     }
     const name = account.display_name || account.username;
     return `${name} (${this.formatHandle(account, hostname)})`;
@@ -466,15 +483,15 @@ export class MastoService extends Service {
     const name = author.display_name || author.username;
     
     // 1. Proxy the avatar
-    let proxiedAvatar = "";
+    let proxiedAvatar;
     try {
       proxiedAvatar = Codec.encode(new URL(author.avatar), Option.image, this.baseURL, authKey).toString();
-    } catch (e) {
+    } catch {
       proxiedAvatar = author.avatar;
     }
 
     // 2. Build RSS Content
-    let html = `<div>`;
+    let html = '<div>';
 
     // Add the actual post content
     html += `<div>${data.content}</div>`;
@@ -490,7 +507,7 @@ export class MastoService extends Service {
             html += `<p><img src="${proxiedMedia}" alt="${altText}"></p>`;
           } else if (media.type === 'video' || media.type === 'gifv') {
             const proxiedVideo = Codec.encode(new URL(media.url), Option.asset, this.baseURL, authKey).toString();
-            let posterAttr = "";
+            let posterAttr = '';
             if (media.preview_url) {
               const proxiedPoster = Codec.encode(new URL(media.preview_url), Option.image, this.baseURL, authKey).toString();
               posterAttr = `poster="${proxiedPoster}"`;
@@ -538,7 +555,7 @@ export class MastoService extends Service {
       </script>
     `;
 
-    let content = '';
+    let content;
 
     if (!authKey) {
       content = `
@@ -556,9 +573,9 @@ export class MastoService extends Service {
       `;
     } else {
       const entries = await kvs.list();
-      let tableRows = '';
+      let tableRows;
       if (entries.length === 0) {
-        tableRows = `<tr class="empty-state"><td colspan="3">No Mastodon Servers Saved.</td></tr>`;
+        tableRows = '<tr class="empty-state"><td colspan="3">No Mastodon Servers Saved.</td></tr>';
       } else {
         tableRows = entries.map(f => `
           <tr>
@@ -626,8 +643,8 @@ export class MastoService extends Service {
       `;
     }
 
-    return new Response(renderLayout("RSS THE PLANET: Mastodon", content, headExtras), {
-      headers: { "Content-Type": "text/html" },
+    return new Response(renderLayout('RSS THE PLANET: Mastodon', content, headExtras), {
+      headers: { 'Content-Type': 'text/html' },
       status: 200
     });
   }

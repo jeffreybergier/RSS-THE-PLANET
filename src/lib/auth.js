@@ -11,7 +11,7 @@ export class Auth {
     try {
       const keys = JSON.parse(env.VALID_KEYS);
       if (!Array.isArray(keys) || keys.length === 0) {
-        throw new Error("Invalid keys: must be a non-empty array");
+        throw new Error('Invalid keys: must be a non-empty array');
       }
       Auth.VALID_KEYS = new Set(keys);
       console.log(`[Auth.load] Loaded: ${Auth.VALID_KEYS.size}`);
@@ -24,7 +24,7 @@ export class Auth {
   static async validate(request) {
     try {
       if (!(Auth.VALID_KEYS instanceof Set)) {
-        throw new Error("[Auth.load] Invalid keys missing: call load first!");
+        throw new Error('[Auth.load] Invalid keys missing: call load first!');
       }
       const url = new URL(request.url);
       let key = url.searchParams.get('key');

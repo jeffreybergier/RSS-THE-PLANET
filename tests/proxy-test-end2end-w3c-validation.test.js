@@ -17,28 +17,30 @@ const DEFAULT_PORT = TEST_TARGET === 'wrangler' ? '8787' : '3333';
 const TEST_PROXY_URL = process.env.TEST_PROXY_URL || `http://127.0.0.1:${DEFAULT_PORT}`;
 
 const VALID_KEYS_JSON = process.env.VALID_KEYS || '["test-key"]';
-let API_KEY = "test-key";
+let API_KEY = 'test-key';
 try {
   const keys = JSON.parse(VALID_KEYS_JSON);
   if (Array.isArray(keys) && keys.length > 0) API_KEY = keys[0];
-} catch (e) {}
+} catch {
+  // Use default API_KEY
+}
 
 // 2. Feed Loading
 function loadFeedsFromOPML(filePath) {
   if (!fs.existsSync(filePath)) return [];
   try {
-    const xmlData = fs.readFileSync(filePath, "utf8");
-    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" });
+    const xmlData = fs.readFileSync(filePath, 'utf8');
+    const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '@_' });
     const jsonObj = parser.parse(xmlData);
     const allOutlines = [];
     function findFeeds(node) {
       if (!node) return;
       const outlines = Array.isArray(node) ? node : [node];
       for (const item of outlines) {
-        if (item["@_xmlUrl"]) {
+        if (item['@_xmlUrl']) {
           allOutlines.push({
-            name: item["@_text"] || item["@_title"] || "Unknown Feed",
-            url: item["@_xmlUrl"]
+            name: item['@_text'] || item['@_title'] || 'Unknown Feed',
+            url: item['@_xmlUrl']
           });
         }
         if (item.outline) findFeeds(item.outline);
@@ -47,7 +49,7 @@ function loadFeedsFromOPML(filePath) {
     const rootOutline = jsonObj?.opml?.body?.outline;
     if (rootOutline) findFeeds(rootOutline);
     return allOutlines;
-  } catch (err) {
+  } catch {
     return [];
   }
 }
@@ -66,7 +68,7 @@ async function getXMLBody(urlString) {
     const response = await fetch(urlString, { headers: HEADERS });
     if (!response.ok) return null;
     return await response.text();
-  } catch (err) {
+  } catch {
     return null;
   }
 }
@@ -77,7 +79,7 @@ async function getW3CValidation(xmlBody, url) {
   let fetchOptions = { method: 'GET' };
   let fetchUrl = 'https://validator.w3.org/feed/check.cgi';
   if (xmlBody) {
-    const cleansedXML = xmlBody.replace(new RegExp(TEST_PROXY_URL.replace(/[-\/\^$*+?.()|[\]{}]/g, '\\$&'), 'g'), 'https://xxx-proxy-yyy.com');
+    const cleansedXML = xmlBody.replace(new RegExp(TEST_PROXY_URL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), 'https://xxx-proxy-yyy.com');
     params.append('manual', '1');
     params.append('rawdata', cleansedXML);
     fetchOptions = {
@@ -102,7 +104,7 @@ async function getW3CValidation(xmlBody, url) {
       }
       return null;
     } catch (e) {
-      if (attempt === 2) console.error("[E2E.W3C] Final failure:", e);
+      if (attempt === 2) console.error('[E2E.W3C] Final failure:', e);
     }
   }
   return null;
@@ -126,7 +128,7 @@ function analyzeIssues(xmlResponse) {
         return { key: fingerprint, type };
       })
       .filter(issue => !knownFailures.includes(issue.type));
-  } catch (e) {
+  } catch {
     return [];
   }
 }
@@ -194,7 +196,7 @@ describe.sequential('E2E Feed Proxy Validation', () => {
       ready = await new Promise(r => http.get(TEST_PROXY_URL, () => r(true)).on('error', () => r(false)).end());
       if (ready) break;
     }
-    if (!ready) throw new Error("Failed to start test server");
+    if (!ready) throw new Error('Failed to start test server');
   }, 45000);
 
   afterAll(() => {
@@ -218,10 +220,10 @@ describe.sequential('E2E Feed Proxy Validation', () => {
       expect(proxyXml).not.toBeNull();
       
       const proxyW3C = await getW3CValidation(proxyXml, null);
-      expect(proxyW3C, "W3C Validation failed for proxied content").not.toBeNull();
+      expect(proxyW3C, 'W3C Validation failed for proxied content').not.toBeNull();
       
       const originalW3C = await getW3CValidation(null, feed.url);
-      expect(originalW3C, "W3C Validation failed for original feed").not.toBeNull();
+      expect(originalW3C, 'W3C Validation failed for original feed').not.toBeNull();
       
       const proxyIssues = analyzeIssues(proxyW3C);
       const originalIssues = analyzeIssues(originalW3C);
@@ -237,7 +239,7 @@ describe.sequential('E2E Feed Proxy Validation', () => {
   });
 
   it('Mastodon: should generate a W3C-valid RSS feed', { timeout: 120000 }, async () => {
-    console.error(`[E2E] STARTING: Mastodon RSS Validation`);
+    console.error('[E2E] STARTING: Mastodon RSS Validation');
     
     // 1. Setup Mock Credentials pointing to our local mock server
     const formData = new URLSearchParams();
@@ -272,9 +274,9 @@ describe.sequential('E2E Feed Proxy Validation', () => {
     
     const issues = analyzeIssues(w3cRes);
     if (issues.length > 0) {
-      console.error(`[E2E] Mastodon RSS Validation FAILED:`, JSON.stringify(issues, null, 2));
+      console.error('[E2E] Mastodon RSS Validation FAILED:', JSON.stringify(issues, null, 2));
     } else {
-      console.error(`[E2E] Mastodon RSS Validation PASSED`);
+      console.error('[E2E] Mastodon RSS Validation PASSED');
     }
     expect(issues).toEqual([]);
   });

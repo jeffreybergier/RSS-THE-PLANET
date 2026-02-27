@@ -1,19 +1,19 @@
-import fs from "fs";
-import { XMLParser, XMLBuilder } from "fast-xml-parser";
-import * as Proxy from '../src/proxy.js';
+import fs from 'fs';
+import { XMLParser, XMLBuilder } from 'fast-xml-parser';
+import * as Proxy from '../src/serve/proxy.js';
 
-const OPML_INPUT_PATH = "./tests/proxy-test-feeds.opml";
-const OPML_OUTPUT_PATH = "./tests/proxy-test-feeds-generated.opml";
+const OPML_INPUT_PATH = './tests/proxy-test-feeds.opml';
+const OPML_OUTPUT_PATH = './tests/proxy-test-feeds-generated.opml';
 
 /**
  * Loads the original OPML and returns the body structure
  */
 function getOriginalStructure(path) {
   try {
-    const xmlData = fs.readFileSync(path, "utf8");
+    const xmlData = fs.readFileSync(path, 'utf8');
     const parser = new XMLParser({
       ignoreAttributes: false,
-      attributeNamePrefix: "@_",
+      attributeNamePrefix: '@_',
     });
     const jsonObj = parser.parse(xmlData);
     return jsonObj.opml.body.outline;
@@ -31,8 +31,8 @@ function transformStructure(nodes, serverUrl, key) {
   return nodeList.map(node => {
     const newNode = { ...node };
     // 1. If this is a feed item, encode the URL
-    if (newNode["@_xmlUrl"]) {
-      newNode["@_xmlUrl"] = encode(newNode["@_xmlUrl"], serverUrl, key);
+    if (newNode['@_xmlUrl']) {
+      newNode['@_xmlUrl'] = encode(newNode['@_xmlUrl'], serverUrl, key);
     }
     // 2. If this is a folder, recurse
     if (newNode.outline) {
@@ -61,7 +61,7 @@ function generateOPML() {
   const serverUrl = process.argv[2];
   const apiKey = process.argv[3];
   if (!serverUrl || !apiKey) {
-    console.error("Usage: node tests/proxy-test-opml-generator.js <SERVER_URL> <API_KEY>");
+    console.error('Usage: node tests/proxy-test-opml-generator.js <SERVER_URL> <API_KEY>');
     process.exit(1);
   }
   console.log(`proxy-test-opml-generator.js: Generating for ${serverUrl}`);
@@ -69,25 +69,25 @@ function generateOPML() {
   const originalStructure = getOriginalStructure(OPML_INPUT_PATH);
   const host = new URL(serverUrl).hostname;
   const opmlObject = {
-    "?xml": {
-      "@_version": "1.0",
-      "@_encoding": "UTF-8"
+    '?xml': {
+      '@_version': '1.0',
+      '@_encoding': 'UTF-8'
     },
     opml: {
-      "@_version": "2.0",
+      '@_version': '2.0',
       head: {
         title: `Proxy Test Feeds: ${host}`,
         dateCreated: new Date().toUTCString()
       },
       body: {
-          outline: transformStructure(originalStructure, serverUrl, apiKey)
+        outline: transformStructure(originalStructure, serverUrl, apiKey)
       }
     }
   };
 
   const builder = new XMLBuilder({
     ignoreAttributes: false,
-    attributeNamePrefix: "@_",
+    attributeNamePrefix: '@_',
     format: true,
     suppressEmptyNode: true
   });
