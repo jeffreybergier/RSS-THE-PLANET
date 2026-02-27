@@ -61,6 +61,11 @@ export const SHARED_CSS = `
   td.actions { text-align: right; white-space: nowrap; }
   tr.empty-state td { padding: 0.75rem; text-align: center; color: #666; }
   
+  /* Utility Classes */
+  .avatar { border-radius: 4px; }
+  .w30 { width: 30%; }
+  .text-right { text-align: right; }
+  
   /* Links */
   a { text-decoration: none; color: #1a73e8; }
   a:hover { text-decoration: underline; }
@@ -111,7 +116,7 @@ export const SHARED_CSS = `
 /**
  * Wraps content in a standard HTML layout.
  */
-export function renderLayout(title, content, headExtras = "") {
+export function renderLayout(title, content, headExtras = '') {
   return `
   <!DOCTYPE html>
   <html lang="en">

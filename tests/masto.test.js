@@ -107,7 +107,7 @@ describe('Masto Service Integration', () => {
             url: 'https://mastodon.test/@user'
           },
           media_attachments: [],
-          language: "en"
+          language: 'en'
         }]), {
           status: 200,
           headers: { 'Content-Type': 'application/json' }

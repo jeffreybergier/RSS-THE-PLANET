@@ -24,7 +24,12 @@ jobs:
       - name: Create Test Results Directory
         run: mkdir -p test-results
 
-      # 2. Run Node Tests
+      # 2. Run Linting
+      - name: Run ESLint
+        continue-on-error: true
+        run: npm run lint
+
+      # 3. Run Node Tests
       # We call the sub-scripts directly to ensure flags are passed correctly
       - name: Node Fast and Medium
         continue-on-error: true
