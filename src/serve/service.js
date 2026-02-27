@@ -1,7 +1,8 @@
 export const Endpoint = {
   proxy: '/proxy/',
   opml: '/opml/',
-  masto: '/masto/'
+  masto: '/masto/',
+  youtube: '/youtube/'
 };
 
 export class Service {
