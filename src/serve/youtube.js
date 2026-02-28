@@ -212,20 +212,22 @@ export class YouTubeService extends Service {
     const entry = await this.kvs.get(this.uuid);
     if (!entry) return renderError(404, 'Account not found', this.requestURL.pathname);
     const data = JSON.parse(entry.value);
-    
+
     try {
       const token = await this.getAccessToken(data.refresh_token);
-      const [pItems, playlistTitle] = await Promise.all([
+      const [pItems, playlistInfo] = await Promise.all([
         this.fetchPlaylistItems(token, this.playlistId),
-        this.fetchPlaylistTitle(token, this.playlistId)
+        this.fetchPlaylistInfo(token, this.playlistId)
       ]);
-      
+
       if (pItems.length === 0) return this.renderEmptyRSS();
-      
-      const videoIds = pItems.map(i => i.contentDetails.videoId).join(',');
-      const videos = await this.fetchVideoDetails(token, videoIds);
-      
-      const feedTitle = playlistTitle;
+
+      const videoIdOrder = pItems.map(i => i.contentDetails.videoId);
+      const videosRaw = await this.fetchVideoDetails(token, videoIdOrder.join(','));
+      // Sort based on the order returned by playlistItems
+      const videos = videoIdOrder.map(id => videosRaw.find(v => v.id === id)).filter(v => v);
+
+      const feedTitle = playlistInfo.title;
       const rss = this.convertYouTubeToRSS(videos, feedTitle, this.playlistId);
       const encoded = new TextEncoder().encode(rss);
       return new Response(encoded, { headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Content-Length': encoded.byteLength.toString(), 'Cache-Control': 'public, max-age=1800' } });
@@ -235,14 +237,16 @@ export class YouTubeService extends Service {
     }
   }
 
-  async fetchPlaylistTitle(accessToken, playlistId) {
+  async fetchPlaylistInfo(accessToken, playlistId) {
     const url = new URL('https://www.googleapis.com/youtube/v3/playlists');
     url.searchParams.set('part', 'snippet');
     url.searchParams.set('id', playlistId);
     const res = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-    if (!res.ok) return 'Playlist Feed';
+    const defaultInfo = { title: 'Playlist Feed', publishedAt: new Date().toISOString() };
+    if (!res.ok) return defaultInfo;
     const data = await res.json();
-    return data.items?.[0]?.snippet?.title || 'Playlist Feed';
+    const item = data.items?.[0];
+    return item ? { title: item.snippet.title, publishedAt: item.snippet.publishedAt } : defaultInfo;
   }
 
   async fetchPlaylistItems(accessToken, playlistId) {
@@ -270,7 +274,7 @@ export class YouTubeService extends Service {
   }
 
   convertYouTubeToRSS(videos, feedTitle, playlistId) {
-    const rssItems = videos.map(v => {
+    const rssItems = videos.map((v) => {
       const proxiedThumb = this.proxyURL(this.getThumbnailURL(v), Option.image);
       return {
         title: v.snippet.title,
@@ -283,7 +287,6 @@ export class YouTubeService extends Service {
     });
     return this.buildRSS(rssItems, feedTitle, playlistId);
   }
-
   getThumbnailURL(video) {
     const t = video.snippet.thumbnails;
     return t?.maxres?.url || t?.high?.url || '';

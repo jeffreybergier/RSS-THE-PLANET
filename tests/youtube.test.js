@@ -157,7 +157,7 @@ describe('YouTube Service Integration', () => {
       }
       if (urlStr.includes('youtube/v3/playlists')) {
         return Promise.resolve(new Response(JSON.stringify({
-          items: [{ snippet: { title: 'Mock Playlist' } }]
+          items: [{ snippet: { title: 'Mock Playlist', publishedAt: '2023-01-01T00:00:00Z' } }]
         }), { status: 200 }));
       }
       if (urlStr.includes('youtube/v3/videos')) {
@@ -178,9 +178,13 @@ describe('YouTube Service Integration', () => {
     expect(body).toContain('<rss');
     expect(body).toContain('<title>Mock Playlist</title>');
     expect(body).toContain('<link>https://www.youtube.com/playlist?list=pl1</link>');
-    expect(body).toContain('Video&nbsp;1&nbsp;Chan&nbsp;1');
-    expect(body).toContain('<a href="http://www.youtube.com/v/v1">Browser Link</a>');
-    expect(body).toContain('<a href="vnd.youtube://v1">Deep Link</a>');
+    expect(body).toContain('<table>');
+    expect(body).toContain('<tr><td>Video 1 Chan 1</td></tr>');
+    expect(body).toContain('<tr><td>http://www.youtube.com/v/v1</td></tr>');
+    expect(body).toContain('<tr><td>vnd.youtube://v1</td></tr>');
+    expect(body).toContain('<guid isPermaLink="false">v1</guid>');
+    expect(body).not.toContain('Browser Link');
+    expect(body).not.toContain('Deep Link');
     expect(body).not.toContain('View on YouTube');
     expect(body).toContain('👍 10');
   });
@@ -199,8 +203,8 @@ describe('YouTube Service Integration', () => {
       if (urlStr.includes('youtube/v3/playlists')) {
         return Promise.resolve(new Response(JSON.stringify({
           items: [
-            { id: 'pl1', snippet: { title: 'Playlist 1' } },
-            { id: 'pl2', snippet: { title: 'Playlist 2' } }
+            { id: 'pl1', snippet: { title: 'Playlist 1', publishedAt: '2023-01-01T00:00:00Z' } },
+            { id: 'pl2', snippet: { title: 'Playlist 2', publishedAt: '2023-01-01T00:00:00Z' } }
           ]
         }), { status: 200 }));
       }
