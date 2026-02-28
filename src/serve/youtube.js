@@ -99,6 +99,22 @@ export class YouTubeService extends Service {
     }
   }
 
+
+  /*
+  Here is the exact request count for that function:
+   1. `fetchYouTubeSubscriptions`: 1 request (gets up to 50 channels).
+   2. `fetchPlaylistItems` (Loop): 5 requests total. We loop 5 times (once per channel) to get the list of videos in
+      their "Uploads" folder.
+   3. `fetchVideoDetails`: 1 request.
+  The "Batching" Magic
+  The reason we only need one request for all the video details is this line:
+   1 const videoIds = allVideosRaw.map(v => v.contentDetails.videoId).join(',');
+   2 const videos = await this.fetchVideoDetails(token, videoIds);
+  We take all 50 IDs (10 from each of the 5 channels), join them with commas into one long string, and send them to
+  Google in a single "Batch" request. Google's API is designed to handle up to 50 IDs at once in that specific endpoint.
+  
+  Total API Calls: 7
+  */
   async getSubsFeed() {
     const token = await this.getValidToken();
     if (token instanceof Response) return token;
