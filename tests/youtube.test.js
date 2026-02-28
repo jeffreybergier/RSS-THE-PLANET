@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { YouTubeService } from '../src/serve/youtube.js';
 import { Endpoint } from '../src/serve/service.js';
 import { Auth } from '../src/lib/auth.js';
-import { KVSValue } from '../src/adapt/kvs.js';
+import { KVSValue, KVSAdapter } from '../src/adapt/kvs.js';
+import { SHA256 } from '../src/adapt/crypto.js';
 
 describe('YouTube Service Integration', () => {
   const mockConfig = {
@@ -19,11 +20,14 @@ describe('YouTube Service Integration', () => {
   const env = {
     YOUTUBE_APP_KEY: JSON.stringify(mockConfig),
     VALID_KEYS: '["test-key"]',
+    ENCRYPTION_SECRET: 'test-secret',
     RSS_THE_PLANET_KVS: new Map()
   };
 
   const createRequest = (path, method = 'GET', options = {}) => {
-    return new Request(`http://localhost:3000${path}`, { method, ...options });
+    const request = new Request(`http://localhost:3000${path}`, { method, ...options });
+    request.env = env;
+    return request;
   };
 
   it('should return 503 if YOUTUBE_APP_KEY is missing', async () => {
@@ -87,32 +91,20 @@ describe('YouTube Service Integration', () => {
     expect(res.status).toBe(302);
     expect(res.headers.get('Location')).toContain(Endpoint.youtube);
     
-    // Verify KVS storage (in-memory Map in our mock env)
-    const kvsMap = env.RSS_THE_PLANET_KVS;
-    expect(kvsMap.size).toBeGreaterThan(0);
-    
-    // Find the YouTube entry.
-    let found = false;
-    for (const val of kvsMap.values()) {
-      if (val.service === 'YOUTUBE') {
-        const data = JSON.parse(val.value);
-        expect(data.refresh_token).toBe('mock-refresh');
-        found = true;
-      }
-    }
-    expect(found).toBe(true);
+    // Verify encrypted KVS storage
+    const adapter = new KVSAdapter(env, 'YOUTUBE', 'test-key', new SHA256(req));
+    const entries = await adapter.list();
+    expect(entries.length).toBe(1);
+    const entry = await adapter.get(entries[0].key);
+    const data = JSON.parse(entry.value);
+    expect(data.refresh_token).toBe('mock-refresh');
   });
 
   it('should fetch and display playlists', async () => {
     Auth.load(env);
     const kvsMap = env.RSS_THE_PLANET_KVS;
-    kvsMap.set('test-uuid', new KVSValue(
-      'test-uuid', 
-      'test@example.com', 
-      JSON.stringify({ refresh_token: 'mock-refresh' }), 
-      'YOUTUBE', 
-      'test-key'
-    ));
+    const encryptedValue = await SHA256.__encrypt(JSON.stringify({ refresh_token: 'mock-refresh' }), 'test-secret' + 'test-key');
+    kvsMap.set('test-uuid', new KVSValue('test-uuid', 'test@example.com', encryptedValue, 'YOUTUBE', 'test-key'));
 
     global.fetch = vi.fn().mockImplementation((url) => {
       const urlStr = url.toString();
@@ -149,13 +141,8 @@ describe('YouTube Service Integration', () => {
   it('should generate RSS feed for playlist', async () => {
     Auth.load(env);
     const kvsMap = env.RSS_THE_PLANET_KVS;
-    kvsMap.set('test-uuid-rss', new KVSValue(
-      'test-uuid-rss', 
-      'test@example.com', 
-      JSON.stringify({ refresh_token: 'mock-refresh' }), 
-      'YOUTUBE', 
-      'test-key'
-    ));
+    const encryptedValue = await SHA256.__encrypt(JSON.stringify({ refresh_token: 'mock-refresh' }), 'test-secret' + 'test-key');
+    kvsMap.set('test-uuid', new KVSValue('test-uuid', 'test@example.com', encryptedValue, 'YOUTUBE', 'test-key'));
 
     global.fetch = vi.fn().mockImplementation((url) => {
       const urlStr = url.toString();
@@ -183,7 +170,7 @@ describe('YouTube Service Integration', () => {
       return Promise.resolve(new Response('', { status: 404 }));
     });
 
-    const req = createRequest(Endpoint.youtube + 'test-uuid-rss/playlist/pl1/feed?key=test-key');
+    const req = createRequest('/youtube/test-uuid/playlist/pl1/feed?key=test-key');
     const service = new YouTubeService(req, env, {});
     const res = await service.handleRequest();
 
@@ -203,13 +190,8 @@ describe('YouTube Service Integration', () => {
   it('should generate OPML for all playlists', async () => {
     Auth.load(env);
     const kvsMap = env.RSS_THE_PLANET_KVS;
-    kvsMap.set('test-uuid-opml', new KVSValue(
-      'test-uuid-opml', 
-      'test@example.com', 
-      JSON.stringify({ refresh_token: 'mock-refresh', email: 'test@example.com' }), 
-      'YOUTUBE', 
-      'test-key'
-    ));
+    const encryptedValue = await SHA256.__encrypt(JSON.stringify({ refresh_token: 'mock-refresh', email: 'test@example.com' }), 'test-secret' + 'test-key');
+    kvsMap.set('test-uuid', new KVSValue('test-uuid', 'test@example.com', encryptedValue, 'YOUTUBE', 'test-key'));
 
     global.fetch = vi.fn().mockImplementation((url) => {
       const urlStr = url.toString();
@@ -227,7 +209,7 @@ describe('YouTube Service Integration', () => {
       return Promise.resolve(new Response('', { status: 404 }));
     });
 
-    const req = createRequest(Endpoint.youtube + 'test-uuid-opml/opml?key=test-key');
+    const req = createRequest(Endpoint.youtube + 'test-uuid/opml?key=test-key');
     const service = new YouTubeService(req, env, {});
     const res = await service.handleRequest();
 
@@ -236,21 +218,16 @@ describe('YouTube Service Integration', () => {
     expect(res.headers.get('Content-Disposition')).toContain('filename="test-example.com-playlists.opml"');
     const body = await res.text();
     expect(body).toContain('<opml');
-    expect(body).toContain('xmlUrl="http://localhost:3000/youtube/test-uuid-opml/playlist/pl1/feed?key=test-key"');
-    expect(body).toContain('xmlUrl="http://localhost:3000/youtube/test-uuid-opml/playlist/pl2/feed?key=test-key"');
+    expect(body).toContain('xmlUrl="http://localhost:3000/youtube/test-uuid/playlist/pl1/feed?key=test-key"');
+    expect(body).toContain('xmlUrl="http://localhost:3000/youtube/test-uuid/playlist/pl2/feed?key=test-key"');
   });
 
   it('should render the dashboard when authorized', async () => {
     Auth.load(env);
     // Seed KVS with an account
     const kvsMap = env.RSS_THE_PLANET_KVS;
-    kvsMap.set('test-uuid-2', new KVSValue(
-      'test-uuid-2', 
-      'test@example.com', 
-      JSON.stringify({ refresh_token: 'some-token' }), 
-      'YOUTUBE', 
-      'test-key'
-    ));
+    const encryptedValue = await SHA256.__encrypt(JSON.stringify({ refresh_token: 'mock-refresh' }), 'test-secret' + 'test-key');
+    kvsMap.set('test-uuid', new KVSValue('test-uuid', 'test@example.com', encryptedValue, 'YOUTUBE', 'test-key'));
 
     const req = createRequest(Endpoint.youtube + '?key=test-key');
     const service = new YouTubeService(req, env, {});

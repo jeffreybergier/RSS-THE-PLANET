@@ -7,6 +7,7 @@ import { KVSAdapter, KVSValue } from '../adapt/kvs.js';
 import * as UI from '../ui/youtube.js';
 import { renderUpdateActionScript } from '../ui/shared.js';
 import { XMLBuilder } from 'fast-xml-parser';
+import * as Crypto from '../adapt/crypto.js';
 
 // MARK: YouTubeService Class
 
@@ -21,7 +22,11 @@ export class YouTubeService extends Service {
     this.requestURL = new URL(request.url);
     this.baseURL = new URL(Endpoint.proxy, this.requestURL.origin);
     
-    this.kvs = this.authKey ? new KVSAdapter(this.env, 'YOUTUBE', this.authKey) : null;
+    this.kvs = null;
+    if (this.authKey) {
+      this.request.env = this.env;
+      this.kvs = new KVSAdapter(this.env, 'YOUTUBE', this.authKey, new Crypto.SHA256(this.request));
+    }
 
     this.uuid = null;
     this.action = null;
@@ -157,7 +162,8 @@ export class YouTubeService extends Service {
     if (!tokens.refresh_token) return renderError(400, 'Refresh token missing. Reconnect required.', '/callback/');
     const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { 'Authorization': `Bearer ${tokens.access_token}` } });
     const userInfo = userRes.ok ? await userRes.json() : { email: 'YouTube Account' };
-    await new KVSAdapter(this.env, 'YOUTUBE', stateAuthKey).put(new KVSValue(null, userInfo.email, JSON.stringify({ refresh_token: tokens.refresh_token, email: userInfo.email }), 'YOUTUBE', stateAuthKey));
+    this.request.env = this.env;
+    await new KVSAdapter(this.env, 'YOUTUBE', stateAuthKey, new Crypto.SHA256(this.request)).put(new KVSValue(null, userInfo.email, JSON.stringify({ refresh_token: tokens.refresh_token, email: userInfo.email }), 'YOUTUBE', stateAuthKey));
     return Response.redirect(`${this.requestURL.origin}${Endpoint.youtube}?key=${stateAuthKey}`, 302);
   }
 

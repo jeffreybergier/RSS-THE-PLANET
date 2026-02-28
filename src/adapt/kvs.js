@@ -92,7 +92,9 @@ export class KVSAdapter {
     
     if (!isKVSValue(entry)) return null;
     if (!this.sha256) return entry;
-    entry.value = await this.sha256.decrypt(entry.value, entry.owner);
+    const decrypted = await this.sha256.decrypt(entry.value, entry.owner);
+    if (decrypted === null) return null;
+    entry.value = decrypted;
     return entry;
   }
   

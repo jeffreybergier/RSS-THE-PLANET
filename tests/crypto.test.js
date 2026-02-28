@@ -45,10 +45,10 @@ describe('encryption', () => {
     expect(await SHA256.__decrypt(encrypted, secret + 'wrong-owner')).toBeNull();
   });
 
-  it('should return original text if not encrypted', async () => {
+  it('should return null if not encrypted', async () => {
     const text = 'plain text';
     const result = await SHA256.__decrypt(text, 'any-secret' + 'any-owner');
-    expect(result).toBe(text);
+    expect(result).toBe(null);
   });
 });
 
