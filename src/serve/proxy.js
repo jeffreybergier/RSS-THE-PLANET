@@ -178,9 +178,10 @@ export class ProxyService extends Service {
   }
 
   async patchRSSChannel(channel) {
+    // TODO: See if this restores Favicons in feeds
+    // await this.XML_encodeURL(channel, 'link', Option.auto);
     delete channel['itunes:new-feed-url'];
-    await this.XML_encodeURL(channel['itunes:image'], '@_href', Option.image);
-    await this.XML_encodeURL(channel, 'link', Option.auto);
+    await this.XML_encodeURL(channel['itunes:image'], '@_href', Option.image);    
     await this.XML_encodeURL(channel['atom:link'], '@_href', Option.feed, i => i['@_rel'] === 'self');
     await this.XML_encodeURL(channel.image, 'url', Option.image);
     await this.XML_encodeURL(channel.image, 'link', Option.auto);
