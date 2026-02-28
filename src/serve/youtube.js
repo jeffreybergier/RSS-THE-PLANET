@@ -21,24 +21,25 @@ export class YouTubeService extends Service {
     super(request, env, ctx);
     this.requestURL = new URL(request.url);
     this.baseURL = new URL(Endpoint.proxy, this.requestURL.origin);
-    this.authKey = null;
-    this.kvs = null;
+    
+    this.kvs = this.authKey ? new KVSAdapter(this.env, 'YOUTUBE', this.authKey) : null;
+
+    this.uuid = null;
+    this.action = null;
+    this.playlistId = null;
+    this.feedAction = null;
 
     const path = this.requestURL.pathname.split('/');
     const idx = path.indexOf('youtube');
     if (idx !== -1 && path[idx + 1]) {
-      this.parsePath(path, idx);
-    }
-  }
-
-  parsePath(path, idx) {
-    if (path[idx + 1] === 'auth') {
-      this.action = 'auth';
-    } else {
-      this.uuid = path[idx + 1];
-      this.action = path[idx + 2] || null;
-      this.playlistId = path[idx + 3] || null;
-      this.feedAction = path[idx + 4] || null;
+      if (path[idx + 1] === 'auth') {
+        this.action = 'auth';
+      } else {
+        this.uuid = path[idx + 1];
+        this.action = path[idx + 2] || null;
+        this.playlistId = path[idx + 3] || null;
+        this.feedAction = path[idx + 4] || null;
+      }
     }
   }
 
@@ -47,8 +48,6 @@ export class YouTubeService extends Service {
       if (!this.env.YOUTUBE_APP_KEY) {
         return renderError(503, 'YouTube Service is not configured.', this.requestURL.pathname);
       }
-      this.authKey = await Auth.validate(this.request);
-      if (this.authKey) this.kvs = new KVSAdapter(this.env, 'YOUTUBE', this.authKey);
       if (this.requestURL.pathname.startsWith('/callback/')) return await this.handleCallback();
       return await this.dispatchAction();
     } catch (e) {

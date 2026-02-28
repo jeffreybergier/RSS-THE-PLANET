@@ -1,3 +1,5 @@
+import { Auth } from '../lib/auth.js';
+
 export const Endpoint = {
   proxy: '/proxy/',
   opml: '/opml/',
@@ -20,6 +22,7 @@ export class Service {
     this.request = request;
     this.env = env;
     this.ctx = ctx;
+    this.authKey = Auth.validate(request);
   }
 
   async handleRequest() {

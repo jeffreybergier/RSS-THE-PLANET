@@ -40,22 +40,23 @@ export class MastoService extends Service {
       this.type = path[idx + 2] || null;
       this.subtype = path[idx + 3] || null;
     }
+
+    this.kvs = null;
+    if (this.authKey) {
+      this.request.env = this.env;
+      this.kvs = new KVSAdapter(this.env, 'MASTO', this.authKey, new Crypto.SHA256(this.request));
+    }
   }
 
   async handleRequest() {
     try {
-      const authKey = await Auth.validate(this.request);
-      let kvs = null;
-      if (authKey) {
-        this.request.env = this.env;
-        kvs = new KVSAdapter(this.env, 'MASTO', authKey, new Crypto.SHA256(this.request));
-      } else if (this.request.method === 'POST') return await this.handlePost(null, null);
+      if (!this.authKey && this.request.method === 'POST') return await this.handlePost(null, null);
 
-      if (this.request.method === 'POST') return await this.handlePost(authKey, kvs);
-      if (this.type === 'delete') return await this.handleDelete(authKey, kvs);
-      if (this.type === 'status' || this.type === 'notifications') return await this.handleStatus(authKey, kvs);
+      if (this.request.method === 'POST') return await this.handlePost(this.authKey, this.kvs);
+      if (this.type === 'delete') return await this.handleDelete(this.authKey, this.kvs);
+      if (this.type === 'status' || this.type === 'notifications') return await this.handleStatus(this.authKey, this.kvs);
 
-      return await this.getSubmitForm(authKey, kvs);
+      return await this.getSubmitForm(this.authKey, this.kvs);
     } catch (e) {
       console.error(`[MastoService.handleRequest] error: ${e.message}`);
       return renderError(500, 'Internal server error', this.requestURL.pathname);

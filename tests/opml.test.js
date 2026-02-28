@@ -32,7 +32,7 @@ describe('OPML Service Integration', () => {
     const file = new Blob([originalOpml], { type: 'text/x-opml' });
     formData.append('opml', file, 'test.opml');
 
-    const request = new Request('http://example.com/opml/', {
+    const request = new Request('http://example.com/opml/?key=test-key', {
       method: 'POST',
       body: formData
     });
@@ -69,7 +69,7 @@ describe('OPML Service Integration', () => {
     const file = new Blob([nestedOpml], { type: 'text/x-opml' });
     formData.append('opml', file, 'nested.opml');
 
-    const request = new Request('http://example.com/opml/', {
+    const request = new Request('http://example.com/opml/?key=test-key', {
       method: 'POST',
       body: formData
     });
@@ -88,8 +88,7 @@ describe('OPML Service Integration', () => {
 
   it('should return 401 for unauthorized POST requests', async () => {
     const formData = new FormData();
-    formData.append('key', 'wrong-key');
-    const request = new Request('http://example.com/opml/', {
+    const request = new Request('http://example.com/opml/?key=wrong-key', {
       method: 'POST',
       body: formData
     });
@@ -107,7 +106,7 @@ describe('OPML Service Integration', () => {
     const file = new Blob([opmlContent], { type: 'text/x-opml' });
     formData.append('opml', file, 'saved.opml');
 
-    const saveRequest = new Request('http://example.com/opml/', {
+    const saveRequest = new Request('http://example.com/opml/?key=test-key', {
       method: 'POST',
       body: formData
     });
@@ -155,7 +154,7 @@ describe('OPML Service Integration', () => {
     const file = new Blob([opmlContent], { type: 'text/x-opml' });
     formData.append('opml', file, 'private.opml');
 
-    const saveRequest = new Request('http://example.com/opml/', {
+    const saveRequest = new Request('http://example.com/opml/?key=test-key', {
       method: 'POST',
       body: formData
     });

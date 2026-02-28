@@ -16,50 +16,45 @@ export class ProxyService extends Service {
     const url = new URL(request.url);
     return url.pathname.startsWith(Endpoint.proxy);
   }
-
   constructor(request, env, ctx) {
     super(request, env, ctx);
     this.requestURL = new URL(request.url);
     this.baseURL = new URL(Endpoint.proxy, this.requestURL.origin);
     this.requestHeaders = ProxyService.sanitizedRequestHeaders(request.headers);
     this.requestMethod = request.method;
-    this.authKey = null;
+    this.targetURL = Codec.decode(this.requestURL) || URL.parse(this.requestURL.searchParams.get('url'));
+    this.option = Option.getOption(this.requestURL.searchParams.get('option'));
   }
   
   async handleRequest() {
     try {
-      this.authKey = await Auth.validate(this.request);
-
-      const targetURL = Codec.decode(this.requestURL) || URL.parse(this.requestURL.searchParams.get('url'));
-      this.targetURL = targetURL;
-      this.option = Option.getOption(this.requestURL.searchParams.get('option'));
-
       if (!this.targetURL) return this.getSubmitForm();
       if (!this.authKey) {
         return renderError(401, 'The key parameter was missing or incorrect', this.requestURL.pathname);
       }
 
-      if (this.option === Option.auto) {
+      let resolvedOption = this.option;
+      if (resolvedOption === Option.auto) {
         console.log(`[ProxyService.handleRequest] autodetecting: ${this.targetURL.toString()}`);
-        this.option = await Option.fetchAutoOption(this.targetURL);
-        console.log(`[ProxyService.handleRequest] autodetected: Option.${this.option}`);
+        resolvedOption = await Option.fetchAutoOption(this.targetURL);
+        console.log(`[ProxyService.handleRequest] autodetected: Option.${resolvedOption}`);
       }
 
-      if (this.requestURL.searchParams.get('url')) return await this.getSubmitResult();
-      if (!this.option) return renderError(502, 'The target could not be reached', this.targetURL.pathname);
+      if (this.requestURL.searchParams.get('url')) return await this.getSubmitResult(resolvedOption);
+      if (!resolvedOption) return renderError(502, 'The target could not be reached', this.targetURL.pathname);
 
-      return await this.dispatchOption();
+      return await this.dispatchOption(resolvedOption);
     } catch (error) {
       console.error(`[ProxyService.handleRequest] error: ${error.message}`);
       return renderError(500, 'An internal server error occurred', this.requestURL.pathname);
     }
   }
 
-  async dispatchOption() {
-    if (this.option === Option.feed) return this.getFeed();
-    if (this.option === Option.asset) return this.getAsset();
-    if (this.option === Option.image) return this.getImage();
-    if (this.option === Option.html) return this.getHTML();
+  async dispatchOption(option) {
+    if (option === Option.feed) return this.getFeed();
+    if (option === Option.asset) return this.getAsset();
+    if (option === Option.image) return this.getImage();
+    if (option === Option.html) return this.getHTML();
     return renderError(400, 'Invalid proxy option requested', this.requestURL.pathname);
   }
 
@@ -74,11 +69,11 @@ export class ProxyService extends Service {
     });
   }
 
-  async getSubmitResult() { 
+  async getSubmitResult(option) { 
     if (!(this.targetURL instanceof URL) || !(this.baseURL instanceof URL) || !this.authKey) {
       throw new Error('Parameter Error: targetURL, baseURL, authKey');
     }
-    const encodedURL = Codec.encode(this.targetURL, this.option, this.baseURL, this.authKey);
+    const encodedURL = Codec.encode(this.targetURL, option, this.baseURL, this.authKey);
     const bodyContent = `${encodedURL.toString()}`;
     const encodedBody = new TextEncoder().encode(bodyContent);
     return new Response(encodedBody, {
