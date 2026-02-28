@@ -64,6 +64,7 @@ export class YouTubeService extends Service {
     if (this.action === 'delete') return await this.handleDelete();
     if (this.action === 'playlists') return await this.viewPlaylists();
     if (this.action === 'opml') return await this.getOPML();
+    if (this.action === 'subs') return await this.getSubsFeed();
     if (this.action === 'playlist' && this.playlistId && this.feedAction === 'feed') {
       return await this.getPlaylistRSS();
     }
@@ -96,6 +97,63 @@ export class YouTubeService extends Service {
       console.error(`[YouTubeService.getOPML] error: ${e.message}`);
       return renderError(502, 'Failed to generate OPML', this.requestURL.pathname);
     }
+  }
+
+  async getSubsFeed() {
+    const token = await this.getValidToken();
+    if (token instanceof Response) return token;
+
+    try {
+      const subscriptions = await this.fetchYouTubeSubscriptions(token);
+      if (subscriptions.length === 0) return this.renderEmptyRSS();
+
+      // Pick 5 random channels
+      // eslint-disable-next-line sonarjs/pseudo-random
+      const shuffled = subscriptions.sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, 5);
+
+      // Fetch videos from each channel's uploads playlist
+      // Shortcut: UC{id} -> UU{id}
+      const videoPromises = selected.map(async (sub) => {
+        const channelId = sub.snippet.resourceId.channelId;
+        const uploadsId = 'UU' + channelId.substring(2);
+        const items = await this.fetchPlaylistItems(token, uploadsId);
+        return items.slice(0, 10); // Take newest 10 from each to stay under 50 total
+      });
+
+      const allVideosRaw = (await Promise.all(videoPromises)).flat().filter(v => v);
+      if (allVideosRaw.length === 0) return this.renderEmptyRSS();
+
+      // Fetch full details (statistics) for these videos
+      const videoIds = allVideosRaw.map(v => v.contentDetails.videoId).join(',');
+      const videos = await this.fetchVideoDetails(token, videoIds);
+
+      // Sort by date descending
+      videos.sort((a, b) => new Date(b.snippet.publishedAt) - new Date(a.snippet.publishedAt));
+
+      const rss = this.convertYouTubeToRSS(videos, 'Subscriptions', null, 'https://www.youtube.com/feed/subscriptions');
+      const encoded = new TextEncoder().encode(rss);
+      return new Response(encoded, {
+        headers: {
+          'Content-Type': 'text/xml; charset=utf-8',
+          'Content-Length': encoded.byteLength.toString(),
+          'Cache-Control': 'no-cache, no-store, must-revalidate'
+        }
+      });
+    } catch (e) {
+      console.error(`[YouTubeService.getSubsFeed] error: ${e.message}`);
+      return renderError(502, 'Failed to generate subscriptions feed', this.requestURL.pathname);
+    }
+  }
+
+  async fetchYouTubeSubscriptions(accessToken) {
+    const url = new URL('https://www.googleapis.com/youtube/v3/subscriptions');
+    url.searchParams.set('part', 'snippet');
+    url.searchParams.set('mine', 'true');
+    url.searchParams.set('maxResults', '50');
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+    if (!res.ok) throw new Error('Subscription fetch failed');
+    return (await res.json()).items || [];
   }
 
   convertPlaylistsToOPML(playlists, email) {
@@ -273,19 +331,20 @@ export class YouTubeService extends Service {
     return new Response(rss, { headers: { 'Content-Type': 'text/xml; charset=utf-8' } });
   }
 
-  convertYouTubeToRSS(videos, feedTitle, playlistId) {
+  convertYouTubeToRSS(videos, feedTitle, playlistId, channelLink = null) {
     const rssItems = videos.map((v) => {
       const proxiedThumb = this.proxyURL(this.getThumbnailURL(v), Option.image);
+      const videoLink = `http://www.youtube.com/v/${v.id}`;
       return {
         title: v.snippet.title,
-        link: `http://www.youtube.com/v/${v.id}`,
-        guid: { '@_isPermaLink': 'false', '#text': v.id },
+        link: videoLink,
+        guid: { '@_isPermaLink': 'true', '#text': videoLink },
         pubDate: new Date(v.snippet.publishedAt).toUTCString(),
         description: { '__cdata': UI.renderVideoRSSContent(v, v.statistics, proxiedThumb) },
         'dc:creator': v.snippet.channelTitle
       };
     });
-    return this.buildRSS(rssItems, feedTitle, playlistId);
+    return this.buildRSS(rssItems, feedTitle, playlistId, channelLink);
   }
   getThumbnailURL(video) {
     const t = video.snippet.thumbnails;
@@ -301,7 +360,7 @@ export class YouTubeService extends Service {
     }
   }
 
-  buildRSS(items, title, playlistId) {
+  buildRSS(items, title, playlistId, channelLink = null) {
     const rssObj = {
       '?xml': { '@_version': '1.0', '@_encoding': 'UTF-8' },
       rss: {
@@ -310,7 +369,7 @@ export class YouTubeService extends Service {
         '@_xmlns:content': 'http://purl.org/rss/1.0/modules/content/',
         channel: {
           title,
-          link: playlistId ? `https://www.youtube.com/playlist?list=${playlistId}` : 'https://www.youtube.com',
+          link: channelLink || (playlistId ? `https://www.youtube.com/playlist?list=${playlistId}` : 'https://www.youtube.com'),
           description: 'YouTube Playlist converted to RSS by RSS-THE-PLANET',
           lastBuildDate: new Date().toUTCString(),
           generator: 'RSS-THE-PLANET',

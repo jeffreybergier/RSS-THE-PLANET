@@ -182,11 +182,59 @@ describe('YouTube Service Integration', () => {
     expect(body).toContain('<tr><td>Video 1 Chan 1</td></tr>');
     expect(body).toContain('<tr><td>http://www.youtube.com/v/v1</td></tr>');
     expect(body).toContain('<tr><td>vnd.youtube://v1</td></tr>');
-    expect(body).toContain('<guid isPermaLink="false">v1</guid>');
+    expect(body).toContain('<guid isPermaLink="true">http://www.youtube.com/v/v1</guid>');
     expect(body).not.toContain('Browser Link');
     expect(body).not.toContain('Deep Link');
     expect(body).not.toContain('View on YouTube');
     expect(body).toContain('👍 10');
+  });
+
+  it('should generate a randomized subscriptions mix feed', async () => {
+    Auth.load(env);
+    const kvsMap = env.RSS_THE_PLANET_KVS;
+    const encryptedValue = await SHA256.__encrypt(JSON.stringify({ refresh_token: 'mock-refresh' }), 'test-secret' + 'test-key');
+    kvsMap.set('test-uuid', new KVSValue('test-uuid', 'test@example.com', encryptedValue, 'YOUTUBE', 'test-key'));
+
+    global.fetch = vi.fn().mockImplementation((url) => {
+      const urlStr = url.toString();
+      if (urlStr === mockConfig.web.token_uri) {
+        return Promise.resolve(new Response(JSON.stringify({ access_token: 'new-access' }), { status: 200 }));
+      }
+      if (urlStr.includes('/subscriptions')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [{ snippet: { resourceId: { channelId: 'UC123' } } }]
+        }), { status: 200 }));
+      }
+      if (urlStr.includes('/playlistItems') && urlStr.includes('playlistId=UU123')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [
+            { contentDetails: { videoId: 'v_sub1' } },
+            { contentDetails: { videoId: 'v_sub2' } }
+          ]
+        }), { status: 200 }));
+      }
+      if (urlStr.includes('/videos')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [
+            { id: 'v_sub1', snippet: { title: 'Sub Video 1', publishedAt: new Date().toISOString(), channelTitle: 'Sub Chan' }, statistics: { likeCount: '5', commentCount: '2' } },
+            { id: 'v_sub2', snippet: { title: 'Sub Video 2', publishedAt: new Date().toISOString(), channelTitle: 'Sub Chan' }, statistics: { likeCount: '10', commentCount: '4' } }
+          ]
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('', { status: 404 }));
+    });
+
+    const req = createRequest('/youtube/test-uuid/subs?key=test-key');
+    const service = new YouTubeService(req, env, {});
+    const res = await service.handleRequest();
+
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('<title>Subscriptions</title>');
+    expect(body).toContain('<link>https://www.youtube.com/feed/subscriptions</link>');
+    expect(body).toContain('Sub Video 1');
+    expect(body).toContain('Sub Video 2');
+    expect(body).toContain('Sub Chan');
   });
 
   it('should generate OPML for all playlists', async () => {
