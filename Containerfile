@@ -37,3 +37,4 @@ COPY . .
 # --- Gemini Environment ---
 FROM app AS gemini
 RUN npm install -g @google/gemini-cli
+ENV FORCE_COLOR=1

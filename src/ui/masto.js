@@ -8,13 +8,7 @@ export const renderDashboardForm = (key, actionUrl, tableRows) => `
   <h2>RSS THE PLANET: Mastodon</h2>
   <p>Save your Mastodon server and API key to convert your timeline to RSS.</p>
   <form id="masto-form" action="${actionUrl}" method="POST">
-    <p>
-      <label for="key">API Key (if not in URL):</label>
-      <div class="input-group">
-        <input type="text" id="key" name="key" value="${key}" oninput="updateAction()">
-        <button type="button" class="secondary" onclick="window.location.href='${Endpoint.masto}?key=' + encodeURIComponent(document.getElementById('key').value)">Update</button>
-      </div>
-    </p>
+    ${Shared.renderKeyInput(key, Endpoint.masto)}
     <p>
       <label for="server">Mastodon Server URL:</label>
       <input type="text" id="server" name="server" placeholder="https://mastodon.social" required>

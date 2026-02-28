@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as Router from '../src/router.js';
-import { KVSAdapter } from '../src/adapt/kvs.js';
+import { KVSAdapter, KVSValue } from '../src/adapt/kvs.js';
 import { SHA256 } from '../src/adapt/crypto.js';
 
 describe('Masto Service Integration', () => {
@@ -35,8 +35,7 @@ describe('Masto Service Integration', () => {
     expect(response.headers.get('Location')).toContain('/masto/');
 
     // Verify it was saved and can be decrypted
-    request.env = env;
-    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(request));
+    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(env));
     const entries = await kvs.list();
     const mastoEntry = entries.find(e => e.name === 'https://mastodon.social');
     const savedValue = await kvs.get(mastoEntry.key);
@@ -51,16 +50,12 @@ describe('Masto Service Integration', () => {
     const formData = new FormData();
     formData.append('server', 'https://delete.me');
     formData.append('apiKey', 'token');
-    const saveRequest = new Request('http://example.com/masto/?key=test-key', {
-      method: 'POST',
-      body: formData
-    });
-    await Router.route(saveRequest, env, ctx);
+    const encryptedApiKey = await SHA256.__encrypt('token', env.ENCRYPTION_SECRET + 'test-key');
 
-    saveRequest.env = env;
-    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(saveRequest));
-    const entries = await kvs.list();
-    const entry = entries.find(e => e.name === 'https://delete.me');
+    // Seed encrypted value
+    // Seed encrypted value
+    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(env));
+    const entry = await kvs.put(new KVSValue(null, 'https://delete.me', encryptedApiKey, 'MASTO', 'test-key'));
     const id = entry.key;
 
     // 2. Delete it
@@ -78,16 +73,11 @@ describe('Masto Service Integration', () => {
     const formData = new FormData();
     formData.append('server', 'https://mastodon.test');
     formData.append('apiKey', 'test-token');
-    const saveRequest = new Request('http://example.com/masto/?key=test-key', {
-      method: 'POST',
-      body: formData
-    });
-    await Router.route(saveRequest, env, ctx);
+    const encryptedApiKey = await SHA256.__encrypt('test-token', env.ENCRYPTION_SECRET + 'test-key');
     
-    saveRequest.env = env;
-    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(saveRequest));
-    const entries = await kvs.list();
-    const entry = entries.find(e => e.name === 'https://mastodon.test');
+    // Manually seed encrypted value
+    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(env));
+    const entry = await kvs.put(new KVSValue(null, 'https://mastodon.test', encryptedApiKey, 'MASTO', 'test-key'));
     const id = entry.key;
 
     // 2. Mock fetch for the status call
@@ -153,16 +143,11 @@ describe('Masto Service Integration', () => {
     const formData = new FormData();
     formData.append('server', 'https://mastodon.test');
     formData.append('apiKey', 'test-token');
-    const saveRequest = new Request('http://example.com/masto/?key=test-key', {
-      method: 'POST',
-      body: formData
-    });
-    await Router.route(saveRequest, env, ctx);
+    const encryptedApiKey = await SHA256.__encrypt('test-token', env.ENCRYPTION_SECRET + 'test-key');
     
-    saveRequest.env = env;
-    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(saveRequest));
-    const entries = await kvs.list();
-    const entry = entries.find(e => e.name === 'https://mastodon.test');
+    // Manually seed encrypted value
+    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(env));
+    const entry = await kvs.put(new KVSValue(null, 'https://mastodon.test', encryptedApiKey, 'MASTO', 'test-key'));
     const id = entry.key;
 
     // 2. Mock fetch for the status call with boost and reply
@@ -218,11 +203,17 @@ describe('Masto Service Integration', () => {
 
     try {
       const statusRequest = new Request(`http://example.com/masto/${id}/status/home?key=test-key`);
+      statusRequest.env = env;
       const response = await Router.route(statusRequest, env, ctx);
       const xml = await response.text();
 
-      // Check Normal Status
-      const normalStatusRequest = new Request(`http://example.com/masto/${id}/status/home?key=test-key`);
+      // 3. Test reply and media
+      const encryptedApiKey2 = await SHA256.__encrypt('test-token', env.ENCRYPTION_SECRET + 'test-key');
+      const entry2 = await kvs.put(new KVSValue(null, 'https://mastodon.test/2', encryptedApiKey2, 'MASTO', 'test-key'));
+      const id2 = entry2.key;
+
+      const normalStatusRequest = new Request(`http://example.com/masto/${id2}/status/home?key=test-key`);
+      normalStatusRequest.env = env;
       // Mock fetch again for just a normal status to keep it clean
       const originalFetch2 = globalThis.fetch;
       globalThis.fetch = async () => new Response(JSON.stringify([{
@@ -237,7 +228,7 @@ describe('Masto Service Integration', () => {
       const xml2 = await res2.text();
       expect(xml2).toContain('<title>💬 from User</title>');
       globalThis.fetch = originalFetch2;
-      
+    
       // Check Boost
       expect(xml).toContain('<title>🚀 by The Booster</title>');
       expect(xml).toContain('<dc:creator>Original Author (original@mastodon.test)</dc:creator>');
@@ -249,12 +240,17 @@ describe('Masto Service Integration', () => {
       expect(xml).toContain('<dc:creator>The Replier (replier@mastodon.test)</dc:creator>');
       expect(xml).toContain('<strong>The Replier (replier@mastodon.test)</strong><br>');
       expect(xml).toContain('reply content');
-      
+    
       // Check Footer Emoji
       expect(xml).toContain('↩️ 0'); // replies_count
 
       // Check Complex Media Status (Images + Video + Link)
-      const complexStatusRequest = new Request(`http://example.com/masto/${id}/status/home?key=test-key`);
+      const encryptedApiKey3 = await SHA256.__encrypt('test-token', env.ENCRYPTION_SECRET + 'test-key');
+      const entry3 = await kvs.put(new KVSValue(null, 'https://mastodon.test/3', encryptedApiKey3, 'MASTO', 'test-key'));
+      const id3 = entry3.key;
+
+      const complexStatusRequest = new Request(`http://example.com/masto/${id3}/status/home?key=test-key`);
+      complexStatusRequest.env = env;
       const originalFetch3 = globalThis.fetch;
       globalThis.fetch = async () => new Response(JSON.stringify([{
         id: '4',
@@ -274,7 +270,12 @@ describe('Masto Service Integration', () => {
       globalThis.fetch = originalFetch3;
 
       // Check Thread Status (Self-Reply)
-      const threadStatusRequest = new Request(`http://example.com/masto/${id}/status/home?key=test-key`);
+      const encryptedApiKey4 = await SHA256.__encrypt('test-token', env.ENCRYPTION_SECRET + 'test-key');
+      const entry4 = await kvs.put(new KVSValue(null, 'https://mastodon.test/4', encryptedApiKey4, 'MASTO', 'test-key'));
+      const id4 = entry4.key;
+
+      const threadStatusRequest = new Request(`http://example.com/masto/${id4}/status/home?key=test-key`);
+      threadStatusRequest.env = env;
       const originalFetch4 = globalThis.fetch;
       globalThis.fetch = async () => new Response(JSON.stringify([{
         id: '5',
@@ -306,16 +307,11 @@ describe('Masto Service Integration', () => {
     const formData = new FormData();
     formData.append('server', 'https://mastodon.test');
     formData.append('apiKey', 'test-token');
-    const saveRequest = new Request('http://example.com/masto/?key=test-key', {
-      method: 'POST',
-      body: formData
-    });
-    await Router.route(saveRequest, env, ctx);
+    const encryptedApiKey = await SHA256.__encrypt('test-token', env.ENCRYPTION_SECRET + 'test-key');
     
-    saveRequest.env = env;
-    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(saveRequest));
-    const entries = await kvs.list();
-    const entry = entries.find(e => e.name === 'https://mastodon.test');
+    // Manually seed encrypted value
+    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(env));
+    const entry = await kvs.put(new KVSValue(null, 'https://mastodon.test', encryptedApiKey, 'MASTO', 'test-key'));
     const id = entry.key;
 
     // 2. Mock fetch for the notifications call
@@ -380,6 +376,7 @@ describe('Masto Service Integration', () => {
 
     try {
       const notifRequest = new Request(`http://example.com/masto/${id}/notifications?key=test-key`);
+      notifRequest.env = env;
       const response = await Router.route(notifRequest, env, ctx);
       expect(response.status).toBe(200);
       const xml = await response.text();

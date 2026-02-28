@@ -1,13 +1,15 @@
 import { ProxyService } from './serve/proxy.js';
 import { OPMLService } from './serve/opml.js';
 import { MastoService } from './serve/masto.js';
+import { YouTubeService } from './serve/youtube.js';
 import { renderError } from './ui/error.js';
 import { Auth } from './lib/auth.js';
 
 const SERVICES = [
   ProxyService,
   OPMLService,
-  MastoService
+  MastoService,
+  YouTubeService
 ];
 
 export async function route(request, env, ctx) {

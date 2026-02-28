@@ -92,7 +92,9 @@ export class KVSAdapter {
     
     if (!isKVSValue(entry)) return null;
     if (!this.sha256) return entry;
-    entry.value = await this.sha256.decrypt(entry.value, entry.owner);
+    const decrypted = await this.sha256.decrypt(entry.value, entry.owner);
+    if (decrypted === null) return null;
+    entry.value = decrypted;
     return entry;
   }
   
@@ -101,6 +103,37 @@ export class KVSAdapter {
     const entry = await this.__get(key);
     if (!isKVSValue(entry)) return null;
     if (entry.owner === this.owner && entry.service === this.service) return entry;
+    console.error(`[KVS.get] failed authentication`);
+    return null;
+  }
+  
+  async __getMeta(key) {
+    if (!isString(key)) throw new Error("[KVS.__get] invalid arguments");
+    let meta = null;
+    if (this.storeIsMap()) {
+      const entry = this.store.get(key);
+      if (!isKVSValue(entry)) return null;
+      meta = new KVSMeta(entry.key, entry.name, entry.service, entry.owner);
+    } else {
+      const { value, metadata } = await this.store.getWithMetadata(key);
+      const name = metadata?.["name"];
+      const owner = metadata?.["owner"];
+      const service = metadata?.["service"];
+      if (!isString(name) || !isString(owner) || !isString(service)) {
+        console.error(`[KVS.__get] failed validation: ${key}`);
+        return null;
+      }
+      meta = new KVSMeta(key, name, service, owner);
+    }
+    
+    if (!isKVSMeta(meta)) return null;
+    return meta;
+  }
+  
+  async getMeta(key) {
+    const meta = await this.__getMeta(key);
+    if (!isKVSMeta(meta)) return null;
+    if (meta.owner === this.owner && meta.service === this.service) return meta;
     console.error(`[KVS.get] failed authentication`);
     return null;
   }
@@ -146,8 +179,8 @@ export class KVSAdapter {
   // return void
   async delete(key) {
     if (!isString(key)) throw new Error("[KVS.delete] invalid arguments");
-    const entry = await this.get(key);
-    if (!isKVSValue(entry)) {
+    const entry = await this.getMeta(key);
+    if (!isKVSMeta(entry)) {
       console.error(`[KVS.delete] failed authentication`);
       return;
     }

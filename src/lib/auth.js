@@ -21,20 +21,13 @@ export class Auth {
     }
   }
 
-  static async validate(request) {
+  static validate(request) {
     try {
       if (!(Auth.VALID_KEYS instanceof Set)) {
         throw new Error('[Auth.load] Invalid keys missing: call load first!');
       }
       const url = new URL(request.url);
-      let key = url.searchParams.get('key');
-      if (!key && request.method === 'POST') {
-        const formData = await request.clone().formData();
-        const bodyKey = formData.get('key');
-        if (typeof bodyKey === 'string') {
-          key = bodyKey;
-        }
-      }
+      const key = url.searchParams.get('key');
       if (key && Auth.VALID_KEYS.has(key)) {
         return key;
       }

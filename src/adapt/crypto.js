@@ -19,11 +19,11 @@ export async function md5(message) {
 }
 
 export class SHA256 {
-  constructor(request) {
-    if (!(request instanceof Request)) {
-      throw new Error('[SHA256.constructor] invalid request');
+  constructor(env) {
+    if (typeof env !== 'object' || env === null) {
+      throw new Error('[SHA256.constructor] invalid environment');
     }
-    this.secret = request.env?.ENCRYPTION_SECRET;
+    this.secret = env.ENCRYPTION_SECRET;
     if (typeof this.secret !== 'string') {
       throw new Error('[SHA256.constructor] missing ENCRYPTION_SECRET');
     }
@@ -59,14 +59,13 @@ export class SHA256 {
   }
 
   static async __decrypt(text, secret) {
-    if (typeof text !== 'string' || typeof secret !== 'string') {
-      throw new Error('[SHA256.decrypt] invalid arguments');
-    }
-    if (!text.startsWith('v1:')) return text;
-    const enc = new TextEncoder();
-    const keyDerivation = await crypto.subtle.digest('SHA-256', enc.encode(secret));
-    const key = await crypto.subtle.importKey('raw', keyDerivation, 'AES-GCM', false, ['decrypt']);
     try {
+      if (typeof text !== 'string' || typeof secret !== 'string' || !text.startsWith('v1:')) {
+        throw new Error('[SHA256.decrypt] invalid arguments');
+      }
+      const enc = new TextEncoder();
+      const keyDerivation = await crypto.subtle.digest('SHA-256', enc.encode(secret));
+      const key = await crypto.subtle.importKey('raw', keyDerivation, 'AES-GCM', false, ['decrypt']);
       const binary = atob(text.slice(3));
       const combined = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) combined[i] = binary.charCodeAt(i);

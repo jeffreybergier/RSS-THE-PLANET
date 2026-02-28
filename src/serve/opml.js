@@ -1,5 +1,4 @@
 import { Service, Endpoint } from './service.js';
-import { Auth } from '../lib/auth.js';
 import { Codec } from '../lib/codec.js';
 import { Option } from '../lib/option.js';
 import { renderError } from '../ui/error.js';
@@ -21,7 +20,7 @@ export class OPMLService extends Service {
     super(request, env, ctx);
     this.requestURL = new URL(request.url);
     this.baseURL = new URL(Endpoint.proxy, this.requestURL.origin);
-    this.authKey = null;
+    this.kvs = this.authKey ? new KVSAdapter(this.env, 'OPML', this.authKey) : null;
 
     const pathComponents = this.requestURL.pathname.split('/');
     const opmlIndex = pathComponents.indexOf('opml');
@@ -29,17 +28,10 @@ export class OPMLService extends Service {
       this.uuid = pathComponents[opmlIndex + 1];
       this.action = pathComponents[opmlIndex + 2] || null;
     }
-
-    this.kvs = null;
   }
 
   async handleRequest() {
     try {
-      this.authKey = await Auth.validate(this.request);
-      if (this.authKey) {
-        this.kvs = new KVSAdapter(this.env, 'OPML', this.authKey);
-      }
-
       if (this.request.method === 'POST') {
         return await this.handlePost();
       }

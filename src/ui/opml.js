@@ -8,13 +8,7 @@ export const renderDashboardForm = (key, actionUrl, fileTable) => `
   <h2>RSS THE PLANET: OPML Rewriter</h2>
   <p>Upload an OPML file to rewrite all feed URLs through this proxy.</p>
   <form id="opml-form" action="${actionUrl}" method="POST" enctype="multipart/form-data">
-    <p>
-      <label for="key">API Key (if not in URL):</label>
-      <div class="input-group">
-        <input type="text" id="key" name="key" value="${key}" oninput="updateAction()">
-        <button type="button" class="secondary" onclick="window.location.href='${Endpoint.opml}?key=' + encodeURIComponent(document.getElementById('key').value)">Update</button>
-      </div>
-    </p>
+    ${Shared.renderKeyInput(key, Endpoint.opml)}
     <fieldset>
       <legend>Mode</legend>
       <input type="radio" id="mode-rewrite" name="mode" value="rewrite" checked>

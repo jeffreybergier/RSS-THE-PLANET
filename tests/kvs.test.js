@@ -20,7 +20,7 @@ describe('KVSAdapter', () => {
     service = 'test-service';
     owner = 'test-owner';
     otherOwner = 'another-owner';
-    sha256 = new SHA256(mockRequest);
+    sha256 = new SHA256(mockEnv);
   });
 
   describe('Constructor', () => {
