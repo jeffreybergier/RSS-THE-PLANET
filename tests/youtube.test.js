@@ -192,7 +192,11 @@ describe('YouTube Service Integration', () => {
     const body = await res.text();
     expect(body).toContain('<rss');
     expect(body).toContain('<title>Mock Playlist</title>');
-    expect(body).toContain('Video 1');
+    expect(body).toContain('<link>https://www.youtube.com/playlist?list=pl1</link>');
+    expect(body).toContain('Video&nbsp;1&nbsp;Chan&nbsp;1');
+    expect(body).toContain('<a href="http://www.youtube.com/v/v1">Browser Link</a>');
+    expect(body).toContain('<a href="vnd.youtube://v1">Deep Link</a>');
+    expect(body).not.toContain('View on YouTube');
     expect(body).toContain('👍 10');
   });
 

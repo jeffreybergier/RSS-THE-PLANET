@@ -224,7 +224,7 @@ export class YouTubeService extends Service {
       const videos = await this.fetchVideoDetails(token, videoIds);
       
       const feedTitle = playlistTitle;
-      const rss = this.convertYouTubeToRSS(videos, feedTitle);
+      const rss = this.convertYouTubeToRSS(videos, feedTitle, this.playlistId);
       const encoded = new TextEncoder().encode(rss);
       return new Response(encoded, { headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Content-Length': encoded.byteLength.toString(), 'Cache-Control': 'public, max-age=1800' } });
     } catch (e) {
@@ -263,23 +263,23 @@ export class YouTubeService extends Service {
   }
 
   renderEmptyRSS() {
-    const rss = this.convertYouTubeToRSS([], 'YouTube Playlist Feed');
+    const rss = this.convertYouTubeToRSS([], 'YouTube Playlist Feed', this.playlistId);
     return new Response(rss, { headers: { 'Content-Type': 'text/xml; charset=utf-8' } });
   }
 
-  convertYouTubeToRSS(videos, feedTitle) {
+  convertYouTubeToRSS(videos, feedTitle, playlistId) {
     const rssItems = videos.map(v => {
       const proxiedThumb = this.proxyURL(this.getThumbnailURL(v), Option.image);
       return {
         title: v.snippet.title,
-        link: `https://www.youtube.com/watch?v=${v.id}`,
+        link: `http://www.youtube.com/v/${v.id}`,
         guid: { '@_isPermaLink': 'false', '#text': v.id },
         pubDate: new Date(v.snippet.publishedAt).toUTCString(),
         description: { '__cdata': UI.renderVideoRSSContent(v, v.statistics, proxiedThumb) },
         'dc:creator': v.snippet.channelTitle
       };
     });
-    return this.buildRSS(rssItems, feedTitle);
+    return this.buildRSS(rssItems, feedTitle, playlistId);
   }
 
   getThumbnailURL(video) {
@@ -296,7 +296,7 @@ export class YouTubeService extends Service {
     }
   }
 
-  buildRSS(items, title) {
+  buildRSS(items, title, playlistId) {
     const rssObj = {
       '?xml': { '@_version': '1.0', '@_encoding': 'UTF-8' },
       rss: {
@@ -305,7 +305,7 @@ export class YouTubeService extends Service {
         '@_xmlns:content': 'http://purl.org/rss/1.0/modules/content/',
         channel: {
           title,
-          link: 'https://www.youtube.com',
+          link: playlistId ? `https://www.youtube.com/playlist?list=${playlistId}` : 'https://www.youtube.com',
           description: 'YouTube Playlist converted to RSS by RSS-THE-PLANET',
           lastBuildDate: new Date().toUTCString(),
           generator: 'RSS-THE-PLANET',

@@ -74,8 +74,7 @@ export const renderPlaylistTable = (accountKey, playlists, authKey) => {
 
 const renderThumbnail = (video, proxiedUrl) => {
   if (!proxiedUrl) return '';
-  const watchUrl = 'https://www.youtube.com/watch?v=' + video.id;
-  return '<p><a href="' + watchUrl + '"><img src="' + proxiedUrl + '" width="640" style="max-width: 100%;"></a></p>';
+  return '<p><img src="' + proxiedUrl + '" width="640" style="max-width: 100%;"></p>';
 };
 
 export const renderVideoRSSContent = (video, stats, proxiedThumb) => {
@@ -84,9 +83,15 @@ export const renderVideoRSSContent = (video, stats, proxiedThumb) => {
   const description = (video.snippet.description || '').replace(/\n/g, '<br>');
   const thumbHtml = renderThumbnail(video, proxiedThumb);
 
+  const titleLine = `${video.snippet.title} ${video.snippet.channelTitle}`.replace(/ /g, '&nbsp;');
+
   return `
     <div class="youtube-rss-item">
-      <p><a href="https://www.youtube.com/watch?v=${video.id}">View on YouTube</a></p>
+      <p>
+        ${titleLine}<br>
+        <a href="http://www.youtube.com/v/${video.id}">Browser Link</a><br>
+        <a href="vnd.youtube://${video.id}">Deep Link</a>
+      </p>
       ${thumbHtml}
       <div class="video-stats" style="margin-bottom: 1rem; font-weight: bold;">
         👍 ${likes}・💬 ${comments}
