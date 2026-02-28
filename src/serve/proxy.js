@@ -1,5 +1,4 @@
 import { Service, Endpoint } from './service.js';
-import { Auth } from '../lib/auth.js';
 import { HTMLRewriter } from '../adapt/html-rewriter.js';
 import { Codec } from '../lib/codec.js';
 import { Option } from '../lib/option.js';

@@ -3,5 +3,5 @@
 - Avoid changing logic inside of existing function. You can change arguments and things like that but the actual logic can be sensitive
 - Always run both 'npm test' (Wrangler) and 'npm run test:node' (Node.js) before finishing a task.
 - do not run tests/proxy-test-end2end-w3c-validation.js because those require a separate server to be running
-- Always run both 'npm test' (Node.js) and 'npm run test:wrangler' (Wrangler) from the Package.json file before finish a task
+- Always run 'npm test' (Node.js) and 'npm run test:wrangler' (Wrangler) and 'npm run lint' from the Package.json file before finish a task
 - UI logic and HTML templates MUST always be factored out of service files and placed into the `src/ui/` folder.
