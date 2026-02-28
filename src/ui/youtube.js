@@ -83,22 +83,20 @@ export const renderVideoRSSContent = (video, stats, proxiedThumb) => {
   const description = (video.snippet.description || '').replace(/\n/g, '<br>');
   const thumbHtml = renderThumbnail(video, proxiedThumb);
 
-  const titleLine = `${video.snippet.title} ${video.snippet.channelTitle}`.replace(/ /g, '&nbsp;');
+  const titleLine = `${video.snippet.title} ${video.snippet.channelTitle}`;
 
   return `
-    <div class="youtube-rss-item">
-      <p>
-        ${titleLine}<br>
-        <a href="http://www.youtube.com/v/${video.id}">Browser Link</a><br>
-        <a href="vnd.youtube://${video.id}">Deep Link</a>
-      </p>
-      ${thumbHtml}
-      <div class="video-stats" style="margin-bottom: 1rem; font-weight: bold;">
-        👍 ${likes}・💬 ${comments}
-      </div>
-      <div class="video-description">
-        ${description}
-      </div>
+    <table>
+      <tr><td>${titleLine}</td></tr>
+      <tr><td>http://www.youtube.com/v/${video.id}</td></tr>
+      <tr><td>vnd.youtube://${video.id}</td></tr>
+    </table>
+    ${thumbHtml}
+    <div class="video-stats" style="margin-bottom: 1rem; font-weight: bold;">
+      👍 ${likes}・💬 ${comments}
+    </div>
+    <div class="video-description">
+      ${description}
     </div>
   `;
 };
