@@ -118,7 +118,7 @@ export class YouTubeService extends Service {
         const channelId = sub.snippet.resourceId.channelId;
         const uploadsId = 'UU' + channelId.substring(2);
         const items = await this.fetchPlaylistItems(token, uploadsId);
-        return items.slice(0, 10); // Take newest 10 from each to stay under 50 total
+        return items.slice(0, 5); // Take newest 5 from each to stay under 50 total
       });
 
       const allVideosRaw = (await Promise.all(videoPromises)).flat().filter(v => v);
