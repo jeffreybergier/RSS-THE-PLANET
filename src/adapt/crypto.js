@@ -19,11 +19,11 @@ export async function md5(message) {
 }
 
 export class SHA256 {
-  constructor(request) {
-    if (!(request instanceof Request)) {
-      throw new Error('[SHA256.constructor] invalid request');
+  constructor(env) {
+    if (typeof env !== 'object' || env === null) {
+      throw new Error('[SHA256.constructor] invalid environment');
     }
-    this.secret = request.env?.ENCRYPTION_SECRET;
+    this.secret = env.ENCRYPTION_SECRET;
     if (typeof this.secret !== 'string') {
       throw new Error('[SHA256.constructor] missing ENCRYPTION_SECRET');
     }

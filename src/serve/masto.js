@@ -42,8 +42,7 @@ export class MastoService extends Service {
 
     this.kvs = null;
     if (this.authKey) {
-      this.request.env = this.env;
-      this.kvs = new KVSAdapter(this.env, 'MASTO', this.authKey, new Crypto.SHA256(this.request));
+      this.kvs = new KVSAdapter(this.env, 'MASTO', this.authKey, new Crypto.SHA256(this.env));
     }
   }
 

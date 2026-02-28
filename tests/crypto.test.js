@@ -55,21 +55,18 @@ describe('encryption', () => {
 describe('SHA256 Class', () => {
   const env = { ENCRYPTION_SECRET: 'top-secret' };
   const owner = 'owner-456';
-  const request = new Request('http://example.com');
-  request.env = env;
 
   it('should throw if secret is missing', () => {
-    const badReq = new Request('http://example.com');
-    expect(() => new SHA256(badReq)).toThrow('[SHA256.constructor] missing ENCRYPTION_SECRET');
+    expect(() => new SHA256({})).toThrow('[SHA256.constructor] missing ENCRYPTION_SECRET');
   });
 
-  it('should throw if request is invalid', () => {
-    expect(() => new SHA256({})).toThrow('[SHA256.constructor] invalid request');
+  it('should throw if environment is invalid', () => {
+    expect(() => new SHA256(null)).toThrow('[SHA256.constructor] invalid environment');
   });
 
   it('should encrypt and decrypt using the class methods', async () => {
     const text = 'hello world';
-    const crypto = new SHA256(request);
+    const crypto = new SHA256(env);
     const encrypted = await crypto.encrypt(text, owner);
     expect(encrypted.startsWith('v1:')).toBe(true);
     const decrypted = await crypto.decrypt(encrypted, owner);

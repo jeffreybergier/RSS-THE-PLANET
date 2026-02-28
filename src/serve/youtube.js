@@ -24,8 +24,7 @@ export class YouTubeService extends Service {
     
     this.kvs = null;
     if (this.authKey) {
-      this.request.env = this.env;
-      this.kvs = new KVSAdapter(this.env, 'YOUTUBE', this.authKey, new Crypto.SHA256(this.request));
+      this.kvs = new KVSAdapter(this.env, 'YOUTUBE', this.authKey, new Crypto.SHA256(this.env));
     }
 
     this.uuid = null;
@@ -162,8 +161,7 @@ export class YouTubeService extends Service {
     if (!tokens.refresh_token) return renderError(400, 'Refresh token missing. Reconnect required.', '/callback/');
     const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { 'Authorization': `Bearer ${tokens.access_token}` } });
     const userInfo = userRes.ok ? await userRes.json() : { email: 'YouTube Account' };
-    this.request.env = this.env;
-    await new KVSAdapter(this.env, 'YOUTUBE', stateAuthKey, new Crypto.SHA256(this.request)).put(new KVSValue(null, userInfo.email, JSON.stringify({ refresh_token: tokens.refresh_token, email: userInfo.email }), 'YOUTUBE', stateAuthKey));
+    await new KVSAdapter(this.env, 'YOUTUBE', stateAuthKey, new Crypto.SHA256(this.env)).put(new KVSValue(null, userInfo.email, JSON.stringify({ refresh_token: tokens.refresh_token, email: userInfo.email }), 'YOUTUBE', stateAuthKey));
     return Response.redirect(`${this.requestURL.origin}${Endpoint.youtube}?key=${stateAuthKey}`, 302);
   }
 

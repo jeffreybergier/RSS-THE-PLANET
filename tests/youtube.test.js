@@ -25,9 +25,7 @@ describe('YouTube Service Integration', () => {
   };
 
   const createRequest = (path, method = 'GET', options = {}) => {
-    const request = new Request(`http://localhost:3000${path}`, { method, ...options });
-    request.env = env;
-    return request;
+    return new Request(`http://localhost:3000${path}`, { method, ...options });
   };
 
   it('should return 503 if YOUTUBE_APP_KEY is missing', async () => {
@@ -92,7 +90,7 @@ describe('YouTube Service Integration', () => {
     expect(res.headers.get('Location')).toContain(Endpoint.youtube);
     
     // Verify encrypted KVS storage
-    const adapter = new KVSAdapter(env, 'YOUTUBE', 'test-key', new SHA256(req));
+    const adapter = new KVSAdapter(env, 'YOUTUBE', 'test-key', new SHA256(env));
     const entries = await adapter.list();
     expect(entries.length).toBe(1);
     const entry = await adapter.get(entries[0].key);

@@ -28,7 +28,6 @@ describe('Masto Service Integration', () => {
       method: 'POST',
       body: formData
     });
-    request.env = env;
 
     const response = await Router.route(request, env, ctx);
     // Should redirect back to list
@@ -36,8 +35,7 @@ describe('Masto Service Integration', () => {
     expect(response.headers.get('Location')).toContain('/masto/');
 
     // Verify it was saved and can be decrypted
-    request.env = env;
-    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(request));
+    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(env));
     const entries = await kvs.list();
     const mastoEntry = entries.find(e => e.name === 'https://mastodon.social');
     const savedValue = await kvs.get(mastoEntry.key);
@@ -60,7 +58,7 @@ describe('Masto Service Integration', () => {
     saveRequest.env = env;
     
     // Seed encrypted value
-    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(saveRequest));
+    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(env));
     const entry = await kvs.put(new KVSValue(null, 'https://delete.me', encryptedApiKey, 'MASTO', 'test-key'));
     const id = entry.key;
 
@@ -84,10 +82,9 @@ describe('Masto Service Integration', () => {
       method: 'POST',
       body: formData
     });
-    saveRequest.env = env;
     
     // Manually seed encrypted value
-    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(saveRequest));
+    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(env));
     const entry = await kvs.put(new KVSValue(null, 'https://mastodon.test', encryptedApiKey, 'MASTO', 'test-key'));
     const id = entry.key;
 
@@ -159,10 +156,9 @@ describe('Masto Service Integration', () => {
       method: 'POST',
       body: formData
     });
-    saveRequest.env = env;
     
     // Manually seed encrypted value
-    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(saveRequest));
+    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(env));
     const entry = await kvs.put(new KVSValue(null, 'https://mastodon.test', encryptedApiKey, 'MASTO', 'test-key'));
     const id = entry.key;
 
@@ -328,10 +324,9 @@ describe('Masto Service Integration', () => {
       method: 'POST',
       body: formData
     });
-    saveRequest.env = env;
     
     // Manually seed encrypted value
-    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(saveRequest));
+    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(env));
     const entry = await kvs.put(new KVSValue(null, 'https://mastodon.test', encryptedApiKey, 'MASTO', 'test-key'));
     const id = entry.key;
 
