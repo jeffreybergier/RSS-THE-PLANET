@@ -333,8 +333,21 @@ describe('YouTube Service Integration', () => {
         return Promise.resolve(new Response(JSON.stringify({
           items: [
             { id: 'v_1h', snippet: { title: '1 Hour Video', publishedAt: new Date().toISOString(), channelTitle: 'Chan' }, contentDetails: { duration: 'PT1H' } },
-            { id: 'v_10s', snippet: { title: '10 Second Video', publishedAt: new Date().toISOString(), channelTitle: 'Chan' }, contentDetails: { duration: 'PT10S' } },
-            { id: 'v_invalid', snippet: { title: 'Invalid Video', publishedAt: new Date().toISOString(), channelTitle: 'Chan' }, contentDetails: { duration: 'PT' } },
+            { 
+              id: 'v_10s', 
+              snippet: { title: '10 Second Video', publishedAt: new Date().toISOString(), channelTitle: 'Chan' }, 
+              contentDetails: { duration: 'PT10S' } 
+            },
+            { 
+              id: 'v_live', 
+              snippet: { title: 'Live Video', publishedAt: new Date().toISOString(), channelTitle: 'Chan' }, 
+              contentDetails: { duration: 'P0D' } 
+            },
+            { 
+              id: 'v_invalid', 
+              snippet: { title: 'Invalid Video', publishedAt: new Date().toISOString(), channelTitle: 'Chan' }, 
+              contentDetails: { duration: 'PT' } 
+            },
             { id: 'v_missing', snippet: { title: 'Missing Duration Video', publishedAt: new Date().toISOString(), channelTitle: 'Chan' }, contentDetails: {} }
           ]
         }), { status: 200 }));
@@ -350,6 +363,7 @@ describe('YouTube Service Integration', () => {
     const body = await res.text();
     expect(body).toContain('1 Hour Video');
     expect(body).not.toContain('10 Second Video');
+    expect(body).toContain('Live Video');
     // Invalid/missing durations should be included by default (filter returns false)
     expect(body).toContain('Invalid Video');
     expect(body).toContain('Missing Duration Video');

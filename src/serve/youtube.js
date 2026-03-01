@@ -439,24 +439,19 @@ export class YouTubeService extends Service {
       console.error(`[YouTubeService.parseDuration] duration is missing or not a string for video ${videoId}`);
       return NaN;
     }
-
-    if (!duration.startsWith('PT')) {
-      console.error(`[YouTubeService.parseDuration] invalid duration format "${duration}" for video ${videoId}`);
+    if (duration === 'P0D') {
+      console.log(`[YouTubeService.parseDuration] video ${videoId}: recognized "P0D" (Live), including in feed`);
       return NaN;
     }
-
     const matches = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
     if (!matches || matches[0] === 'PT') {
       console.error(`[YouTubeService.parseDuration] failed to parse duration "${duration}" for video ${videoId}`);
       return NaN;
     }
-
     const h = parseInt(matches[1] || '0', 10);
     const m = parseInt(matches[2] || '0', 10);
     const s = parseInt(matches[3] || '0', 10);
     const totalSeconds = h * 3600 + m * 60 + s;
-
-    console.log(`[YouTubeService.parseDuration] video ${videoId}: parsed "${duration}" to ${totalSeconds}s`);
     return totalSeconds;
   }
 
