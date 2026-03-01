@@ -142,10 +142,17 @@ export class YouTubeService extends Service {
 
       // Fetch full details (statistics) for these videos
       const videoIds = allVideosRaw.map(v => v.contentDetails.videoId).join(',');
-      const videos = await this.fetchVideoDetails(token, videoIds);
+      const videosRaw = await this.fetchVideoDetails(token, videoIds);
+
+      // Filter out shorts (<= 180s)
+      const videos = videosRaw.filter(v => {
+        const seconds = this.parseDuration(v.contentDetails?.duration, v.id);
+        return isNaN(seconds) || seconds > 180;
+      });
 
       // Sort by date descending
       videos.sort((a, b) => new Date(b.snippet.publishedAt) - new Date(a.snippet.publishedAt));
+
 
       const rss = this.convertYouTubeToRSS(videos, 'Subscriptions', null, 'https://www.youtube.com/feed/subscriptions');
       const encoded = new TextEncoder().encode(rss);
@@ -394,6 +401,32 @@ export class YouTubeService extends Service {
       }
     };
     return new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: '@_', format: true, suppressBooleanAttributes: false, suppressEmptyNode: true, cdataPropName: '__cdata' }).build(rssObj);
+  }
+
+  parseDuration(duration, videoId = 'unknown') {
+    if (typeof duration !== 'string' || !duration) {
+      console.error(`[YouTubeService.parseDuration] duration is missing or not a string for video ${videoId}`);
+      return NaN;
+    }
+
+    if (!duration.startsWith('PT')) {
+      console.error(`[YouTubeService.parseDuration] invalid duration format "${duration}" for video ${videoId}`);
+      return NaN;
+    }
+
+    const matches = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!matches || matches[0] === 'PT') {
+      console.error(`[YouTubeService.parseDuration] failed to parse duration "${duration}" for video ${videoId}`);
+      return NaN;
+    }
+
+    const h = parseInt(matches[1] || '0', 10);
+    const m = parseInt(matches[2] || '0', 10);
+    const s = parseInt(matches[3] || '0', 10);
+    const totalSeconds = h * 3600 + m * 60 + s;
+
+    console.log(`[YouTubeService.parseDuration] video ${videoId}: parsed "${duration}" to ${totalSeconds}s`);
+    return totalSeconds;
   }
 
   async handleDelete() {

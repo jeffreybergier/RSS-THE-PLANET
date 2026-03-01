@@ -237,6 +237,113 @@ describe('YouTube Service Integration', () => {
     expect(body).toContain('Sub Chan');
   });
 
+  it('should filter out shorts in the subscription feed', async () => {
+    Auth.load(env);
+    const kvsMap = env.RSS_THE_PLANET_KVS;
+    const encryptedValue = await SHA256.__encrypt(JSON.stringify({ refresh_token: 'mock-refresh' }), 'test-secret' + 'test-key');
+    kvsMap.set('test-uuid', new KVSValue('test-uuid', 'test@example.com', encryptedValue, 'YOUTUBE', 'test-key'));
+
+    global.fetch = vi.fn().mockImplementation((url) => {
+      const urlStr = url.toString();
+      if (urlStr === mockConfig.web.token_uri) {
+        return Promise.resolve(new Response(JSON.stringify({ access_token: 'new-access' }), { status: 200 }));
+      }
+      if (urlStr.includes('/subscriptions')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [{ snippet: { resourceId: { channelId: 'UC123' } } }]
+        }), { status: 200 }));
+      }
+      if (urlStr.includes('/playlistItems')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [
+            { contentDetails: { videoId: 'v_regular' } },
+            { contentDetails: { videoId: 'v_short' } }
+          ]
+        }), { status: 200 }));
+      }
+      if (urlStr.includes('/videos')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [
+            { 
+              id: 'v_regular', 
+              snippet: { title: 'Regular Video', publishedAt: new Date().toISOString(), channelTitle: 'Chan' }, 
+              statistics: { likeCount: '5' },
+              contentDetails: { duration: 'PT3M5S' } // 185 seconds
+            },
+            { 
+              id: 'v_short', 
+              snippet: { title: 'Short Video', publishedAt: new Date().toISOString(), channelTitle: 'Chan' }, 
+              statistics: { likeCount: '10' },
+              contentDetails: { duration: 'PT2M55S' } // 175 seconds
+            }
+          ]
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('', { status: 404 }));
+    });
+
+    const req = createRequest('/youtube/test-uuid/subs?key=test-key');
+    const service = new YouTubeService(req, env, {});
+    const res = await service.handleRequest();
+
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('Regular Video');
+    expect(body).not.toContain('Short Video');
+  });
+
+  it('should handle various duration formats and invalid inputs', async () => {
+    Auth.load(env);
+    const kvsMap = env.RSS_THE_PLANET_KVS;
+    const encryptedValue = await SHA256.__encrypt(JSON.stringify({ refresh_token: 'mock-refresh' }), 'test-secret' + 'test-key');
+    kvsMap.set('test-uuid', new KVSValue('test-uuid', 'test@example.com', encryptedValue, 'YOUTUBE', 'test-key'));
+
+    global.fetch = vi.fn().mockImplementation((url) => {
+      const urlStr = url.toString();
+      if (urlStr === mockConfig.web.token_uri) {
+        return Promise.resolve(new Response(JSON.stringify({ access_token: 'new-access' }), { status: 200 }));
+      }
+      if (urlStr.includes('/subscriptions')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [{ snippet: { resourceId: { channelId: 'UC123' } } }]
+        }), { status: 200 }));
+      }
+      if (urlStr.includes('/playlistItems')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [
+            { contentDetails: { videoId: 'v_1h' } },
+            { contentDetails: { videoId: 'v_10s' } },
+            { contentDetails: { videoId: 'v_invalid' } },
+            { contentDetails: { videoId: 'v_missing' } }
+          ]
+        }), { status: 200 }));
+      }
+      if (urlStr.includes('/videos')) {
+        return Promise.resolve(new Response(JSON.stringify({
+          items: [
+            { id: 'v_1h', snippet: { title: '1 Hour Video', publishedAt: new Date().toISOString(), channelTitle: 'Chan' }, contentDetails: { duration: 'PT1H' } },
+            { id: 'v_10s', snippet: { title: '10 Second Video', publishedAt: new Date().toISOString(), channelTitle: 'Chan' }, contentDetails: { duration: 'PT10S' } },
+            { id: 'v_invalid', snippet: { title: 'Invalid Video', publishedAt: new Date().toISOString(), channelTitle: 'Chan' }, contentDetails: { duration: 'PT' } },
+            { id: 'v_missing', snippet: { title: 'Missing Duration Video', publishedAt: new Date().toISOString(), channelTitle: 'Chan' }, contentDetails: {} }
+          ]
+        }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('', { status: 404 }));
+    });
+
+    const req = createRequest('/youtube/test-uuid/subs?key=test-key');
+    const service = new YouTubeService(req, env, {});
+    const res = await service.handleRequest();
+
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('1 Hour Video');
+    expect(body).not.toContain('10 Second Video');
+    // Invalid/missing durations should be included by default (filter returns false)
+    expect(body).toContain('Invalid Video');
+    expect(body).toContain('Missing Duration Video');
+  });
+
   it('should generate OPML for all playlists', async () => {
     Auth.load(env);
     const kvsMap = env.RSS_THE_PLANET_KVS;
