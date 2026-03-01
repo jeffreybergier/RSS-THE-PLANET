@@ -77,7 +77,8 @@ export const renderPlaylistTable = (accountKey, playlists, authKey) => {
 
 const renderThumbnail = (video, proxiedUrl) => {
   if (!proxiedUrl) return '';
-  return '<p><img src="' + proxiedUrl + '" width="640" style="max-width: 100%;"></p>';
+  const videoLink = `http://www.youtube.com/v/${video.id}`;
+  return `<p><a href="${videoLink}"><img src="${proxiedUrl}" width="640" style="max-width: 100%;"></a></p>`;
 };
 
 export const renderVideoRSSContent = (video, stats, proxiedThumb) => {

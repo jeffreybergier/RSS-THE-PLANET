@@ -162,7 +162,17 @@ describe('YouTube Service Integration', () => {
       }
       if (urlStr.includes('youtube/v3/videos')) {
         return Promise.resolve(new Response(JSON.stringify({
-          items: [{ id: 'v1', snippet: { title: 'Video 1', publishedAt: new Date().toISOString(), description: 'Desc 1', channelTitle: 'Chan 1' }, statistics: { likeCount: '10', commentCount: '5' } }]
+          items: [{ 
+            id: 'v1', 
+            snippet: { 
+              title: 'Video 1', 
+              publishedAt: new Date().toISOString(), 
+              description: 'Desc 1', 
+              channelTitle: 'Chan 1',
+              thumbnails: { high: { url: 'https://example.com/thumb.jpg' } }
+            }, 
+            statistics: { likeCount: '10', commentCount: '5' } 
+          }]
         }), { status: 200 }));
       }
       return Promise.resolve(new Response('', { status: 404 }));
@@ -182,6 +192,7 @@ describe('YouTube Service Integration', () => {
     expect(body).toContain('<tr><td>Video 1 Chan 1</td></tr>');
     expect(body).toContain('<tr><td>http://www.youtube.com/v/v1</td></tr>');
     expect(body).toContain('<tr><td>vnd.youtube://v1</td></tr>');
+    expect(body).toContain('<a href="http://www.youtube.com/v/v1"><img');
     expect(body).toContain('<guid isPermaLink="true">http://www.youtube.com/v/v1</guid>');
     expect(body).not.toContain('Browser Link');
     expect(body).not.toContain('Deep Link');
