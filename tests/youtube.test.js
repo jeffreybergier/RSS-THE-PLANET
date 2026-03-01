@@ -375,9 +375,9 @@ describe('YouTube Service Integration', () => {
     const encryptedValue = await SHA256.__encrypt(JSON.stringify({ refresh_token: 'mock-refresh' }), 'test-secret' + 'test-key');
     kvsMap.set('test-uuid', new KVSValue('test-uuid', 'test@example.com', encryptedValue, 'YOUTUBE', 'test-key'));
 
-    // Create 15 mock channels UC01 to UC15
-    const channels = Array.from({ length: 15 }, (_, i) => ({
-      snippet: { resourceId: { channelId: `UC${(i + 1).toString().padStart(2, '0')}` } }
+    // Create 100 mock channels UC001 to UC100
+    const allChannels = Array.from({ length: 100 }, (_, i) => ({
+      snippet: { resourceId: { channelId: `UC${(i + 1).toString().padStart(3, '0')}` } }
     }));
 
     const getFeed = async (offset) => {
@@ -394,7 +394,18 @@ describe('YouTube Service Integration', () => {
           return Promise.resolve(new Response(JSON.stringify({ access_token: 'new-access' }), { status: 200 }));
         }
         if (urlStr.includes('/subscriptions')) {
-          return Promise.resolve(new Response(JSON.stringify({ items: channels }), { status: 200 }));
+          const searchParams = new URL(urlStr).searchParams;
+          const pageToken = searchParams.get('pageToken');
+          if (!pageToken) {
+            return Promise.resolve(new Response(JSON.stringify({ 
+              items: allChannels.slice(0, 50),
+              nextPageToken: 'page2' 
+            }), { status: 200 }));
+          } else {
+            return Promise.resolve(new Response(JSON.stringify({ 
+              items: allChannels.slice(50, 100)
+            }), { status: 200 }));
+          }
         }
         if (urlStr.includes('/playlistItems')) {
           const playlistId = new URL(urlStr).searchParams.get('playlistId');
@@ -426,10 +437,10 @@ describe('YouTube Service Integration', () => {
     const body3 = await getFeed(2);
 
     const getChannels = (body) => {
-      const matches = body.match(/http:\/\/www.youtube.com\/v\/v_UU\d{2}/g);
+      const matches = body.match(/http:\/\/www.youtube.com\/v\/v_UU\d{3}/g);
       if (!matches) return [];
       const ids = matches.map(m => {
-        const idMatch = m.match(/UU\d{2}/);
+        const idMatch = m.match(/UU\d{3}/);
         return idMatch ? idMatch[0] : null;
       }).filter(id => id !== null);
       return [...new Set(ids)].sort();

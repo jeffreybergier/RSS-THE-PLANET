@@ -106,19 +106,20 @@ export class YouTubeService extends Service {
 
 
   /*
-  Here is the exact request count for that function:
-   1. `fetchYouTubeSubscriptions`: 1 request (gets up to 50 channels).
-   2. `fetchPlaylistItems` (Loop): 5 requests total. We loop 5 times (once per channel) to get the list of videos in
-      their "Uploads" folder.
-   3. `fetchVideoDetails`: 1 request.
-  The "Batching" Magic
-  The reason we only need one request for all the video details is this line:
-   1 const videoIds = allVideosRaw.map(v => v.contentDetails.videoId).join(',');
-   2 const videos = await this.fetchVideoDetails(token, videoIds);
-  We take all 50 IDs (10 from each of the 5 channels), join them with commas into one long string, and send them to
-  Google in a single "Batch" request. Google's API is designed to handle up to 50 IDs at once in that specific endpoint.
+  Here is the exact request count for this function:
+   1. `fetchYouTubeSubscriptions`: 1-2 requests (gets up to 100 channels).
+   2. `selectRotatedChannels`: 0 requests (Logic only). Picks a sequential batch of 5 channels 
+      from the 50-100 fetched above, rotating the starting point on each run.
+   3. `fetchPlaylistItems` (Loop): 5 requests total. We loop 5 times (once per selected channel) 
+      to get the newest 10 videos from their "Uploads" folder.
+   4. `fetchVideoDetails`: 1 request.
   
-  Total API Calls: 7
+  The "Batching" Magic:
+  We take up to 50 video IDs (10 from each of the 5 channels), join them with commas, 
+  and fetch their full metadata (durations, stats) in a single batch request. 
+  This allows us to filter out "Shorts" (<= 180s) and Live Streams (P0D) efficiently.
+  
+  Total API Calls: 7-8
   */
   async getSubsFeed() {
     const token = await this.getValidToken();
@@ -154,7 +155,6 @@ export class YouTubeService extends Service {
 
       // Sort by date descending
       videos.sort((a, b) => new Date(b.snippet.publishedAt) - new Date(a.snippet.publishedAt));
-
 
       const rss = this.convertYouTubeToRSS(videos, 'Subscriptions', null, 'https://www.youtube.com/feed/subscriptions');
       const encoded = new TextEncoder().encode(rss);
@@ -201,13 +201,28 @@ export class YouTubeService extends Service {
   }
 
   async fetchYouTubeSubscriptions(accessToken) {
-    const url = new URL('https://www.googleapis.com/youtube/v3/subscriptions');
-    url.searchParams.set('part', 'snippet');
-    url.searchParams.set('mine', 'true');
-    url.searchParams.set('maxResults', '50');
-    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-    if (!res.ok) throw new Error('Subscription fetch failed');
-    return (await res.json()).items || [];
+    const fetchPage = async (pageToken = null) => {
+      const url = new URL('https://www.googleapis.com/youtube/v3/subscriptions');
+      url.searchParams.set('part', 'snippet');
+      url.searchParams.set('mine', 'true');
+      url.searchParams.set('maxResults', '50');
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
+      
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+      if (!res.ok) throw new Error('Subscription fetch failed');
+      return await res.json();
+    };
+
+    const firstPage = await fetchPage();
+    const items = firstPage.items || [];
+
+    // Fetch up to 100 total (2 pages)
+    if (firstPage.nextPageToken) {
+      const secondPage = await fetchPage(firstPage.nextPageToken);
+      if (secondPage.items) items.push(...secondPage.items);
+    }
+
+    return items;
   }
 
   convertPlaylistsToOPML(playlists, email) {
