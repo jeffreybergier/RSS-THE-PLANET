@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { YouTubeService } from '../src/serve/youtube.js';
+import { YouTubeService, __setRotationOffset } from '../src/serve/youtube.js';
 import { Endpoint } from '../src/serve/service.js';
 import { Auth } from '../src/lib/auth.js';
 import { KVSValue, KVSAdapter } from '../src/adapt/kvs.js';
@@ -353,6 +353,86 @@ describe('YouTube Service Integration', () => {
     // Invalid/missing durations should be included by default (filter returns false)
     expect(body).toContain('Invalid Video');
     expect(body).toContain('Missing Duration Video');
+  });
+
+  it('should rotate through subscriptions sequentially', async () => {
+    Auth.load(env);
+    const kvsMap = env.RSS_THE_PLANET_KVS;
+    const encryptedValue = await SHA256.__encrypt(JSON.stringify({ refresh_token: 'mock-refresh' }), 'test-secret' + 'test-key');
+    kvsMap.set('test-uuid', new KVSValue('test-uuid', 'test@example.com', encryptedValue, 'YOUTUBE', 'test-key'));
+
+    // Create 15 mock channels UC01 to UC15
+    const channels = Array.from({ length: 15 }, (_, i) => ({
+      snippet: { resourceId: { channelId: `UC${(i + 1).toString().padStart(2, '0')}` } }
+    }));
+
+    const getFeed = async (offset) => {
+      Auth.load(env);
+      // Ensure KVS entry is present with consistent encryption
+      const encryptedValue = await SHA256.__encrypt(JSON.stringify({ refresh_token: 'mock-refresh' }), 'test-secret' + 'test-key');
+      kvsMap.set('test-uuid', new KVSValue('test-uuid', 'test@example.com', encryptedValue, 'YOUTUBE', 'test-key'));
+      
+      __setRotationOffset(offset);
+      global.fetch = vi.fn().mockImplementation((url) => {
+        const urlStr = url.toString();
+        // Handle token refresh
+        if (urlStr.includes('oauth2.googleapis.com/token')) {
+          return Promise.resolve(new Response(JSON.stringify({ access_token: 'new-access' }), { status: 200 }));
+        }
+        if (urlStr.includes('/subscriptions')) {
+          return Promise.resolve(new Response(JSON.stringify({ items: channels }), { status: 200 }));
+        }
+        if (urlStr.includes('/playlistItems')) {
+          const playlistId = new URL(urlStr).searchParams.get('playlistId');
+          return Promise.resolve(new Response(JSON.stringify({
+            items: [{ contentDetails: { videoId: `v_${playlistId}` } }]
+          }), { status: 200 }));
+        }
+        if (urlStr.includes('/videos')) {
+          const ids = new URL(urlStr).searchParams.get('id').split(',');
+          return Promise.resolve(new Response(JSON.stringify({
+            items: ids.map(id => ({ 
+              id, 
+              snippet: { title: `Video ${id}`, publishedAt: new Date().toISOString(), channelTitle: 'Chan' }, 
+              contentDetails: { duration: 'PT10M' } 
+            }))
+          }), { status: 200 }));
+        }
+        return Promise.resolve(new Response('', { status: 404 }));
+      });
+
+      const req = createRequest('/youtube/test-uuid/subs?key=test-key');
+      const service = new YouTubeService(req, env, {});
+      const res = await service.handleRequest();
+      return await res.text();
+    };
+
+    const body1 = await getFeed(0);
+    const body2 = await getFeed(1);
+    const body3 = await getFeed(2);
+
+    const getChannels = (body) => {
+      const matches = body.match(/http:\/\/www.youtube.com\/v\/v_UU\d{2}/g);
+      if (!matches) return [];
+      const ids = matches.map(m => {
+        const idMatch = m.match(/UU\d{2}/);
+        return idMatch ? idMatch[0] : null;
+      }).filter(id => id !== null);
+      return [...new Set(ids)].sort();
+    };
+
+    const c1 = getChannels(body1);
+    const c2 = getChannels(body2);
+    const c3 = getChannels(body3);
+
+    expect(c1.length).toBe(5);
+    expect(c2.length).toBe(5);
+    expect(c3.length).toBe(5);
+
+    // Ensure they are different batches
+    expect(c1).not.toEqual(c2);
+    expect(c2).not.toEqual(c3);
+    expect(c1).not.toEqual(c3);
   });
 
   it('should generate OPML for all playlists', async () => {

@@ -9,6 +9,11 @@ import { renderUpdateActionScript } from '../ui/shared.js';
 import { XMLBuilder } from 'fast-xml-parser';
 import * as Crypto from '../adapt/crypto.js';
 
+// MARK: Global State
+
+let rotationOffset = null;
+export const __setRotationOffset = (val) => { rotationOffset = val; };
+
 // MARK: YouTubeService Class
 
 export class YouTubeService extends Service {
@@ -123,10 +128,7 @@ export class YouTubeService extends Service {
       const subscriptions = await this.fetchYouTubeSubscriptions(token);
       if (subscriptions.length === 0) return this.renderEmptyRSS();
 
-      // Pick 5 random channels
-      // eslint-disable-next-line sonarjs/pseudo-random
-      const shuffled = subscriptions.sort(() => 0.5 - Math.random());
-      const selected = shuffled.slice(0, 5);
+      const selected = this.selectRotatedChannels(subscriptions);
 
       // Fetch videos from each channel's uploads playlist
       // Shortcut: UC{id} -> UU{id}
@@ -167,6 +169,35 @@ export class YouTubeService extends Service {
       console.error(`[YouTubeService.getSubsFeed] error: ${e.message}`);
       return renderError(502, 'Failed to generate subscriptions feed', this.requestURL.pathname);
     }
+  }
+
+  selectRotatedChannels(subscriptions) {
+    const total = subscriptions.length;
+    const batchSize = 5;
+    const oldOffset = rotationOffset;
+
+    if (rotationOffset === null) {
+      // eslint-disable-next-line sonarjs/pseudo-random
+      rotationOffset = Math.floor(Math.random() * total);
+    }
+
+    const startIndex = (rotationOffset * batchSize) % total;
+    const scannedIndexes = [];
+    const selected = [];
+    for (let i = 0; i < batchSize; i++) {
+      const idx = (startIndex + i) % total;
+      scannedIndexes.push(idx);
+      if (!selected.includes(subscriptions[idx])) {
+        selected.push(subscriptions[idx]);
+      }
+    }
+    
+    const nextOffset = rotationOffset + 1;
+    const offsetLog = (oldOffset) ? `saved(${oldOffset})` : `random(${rotationOffset})`;
+    console.log(`[YouTubeService.selectRotatedChannels] offset<${offsetLog},next(${nextOffset})> channels<scanning(${scannedIndexes.join(',')}),total(${total})>`);
+    
+    rotationOffset = nextOffset;
+    return selected;
   }
 
   async fetchYouTubeSubscriptions(accessToken) {
