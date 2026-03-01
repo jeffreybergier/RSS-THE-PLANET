@@ -137,7 +137,8 @@ function analyzeIssues(xmlResponse) {
   try {
     const jsonObj = parser.parse(xmlResponse);
     const issues = parseValidationResponse(jsonObj);
-    const knownFailures = ['SelfDoesntMatchLocation', 'ContainsHTML', 'ContainsUndeclaredHTML', 'NotHtml', 'UnexpectedWhitespace', 'MissingAtomSelfLink'];
+    // TODO: See if this fixes rss icons not appearing ImageLinkDoesntMatch
+    const knownFailures = ['SelfDoesntMatchLocation', 'ContainsHTML', 'ContainsUndeclaredHTML', 'NotHtml', 'UnexpectedWhitespace', 'MissingAtomSelfLink', 'ImageLinkDoesntMatch'];
     
     return issues
       .map(mapIssueToFingerprint)

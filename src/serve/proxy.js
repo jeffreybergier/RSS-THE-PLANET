@@ -183,8 +183,8 @@ export class ProxyService extends Service {
     await this.XML_encodeURL(channel['atom:link'], '@_href', Option.feed, i => i['@_rel'] === 'self');
     await this.XML_encodeURL(channel.image, 'url', Option.image);
     await this.XML_encodeURL(channel.image, 'link', Option.auto);
-    // TODO: See if this fixes the tests
-    await this.XML_encodeURL(channel, 'link', Option.auto);
+    // TODO: See if this fixes rss icons not appearing
+    // await this.XML_encodeURL(channel, 'link', Option.auto);
     
     let items = channel.item || [];
     if (!Array.isArray(items)) items = [items];
