@@ -9,6 +9,11 @@ import { renderUpdateActionScript } from '../ui/shared.js';
 import { XMLBuilder } from 'fast-xml-parser';
 import * as Crypto from '../adapt/crypto.js';
 
+// MARK: Global State
+
+let rotationOffset = null;
+export const __setRotationOffset = (val) => { rotationOffset = val; };
+
 // MARK: YouTubeService Class
 
 export class YouTubeService extends Service {
@@ -99,6 +104,23 @@ export class YouTubeService extends Service {
     }
   }
 
+
+  /*
+  Here is the exact request count for this function:
+   1. `fetchYouTubeSubscriptions`: 1-2 requests (gets up to 100 channels).
+   2. `selectRotatedChannels`: 0 requests (Logic only). Picks a sequential batch of 5 channels 
+      from the 50-100 fetched above, rotating the starting point on each run.
+   3. `fetchPlaylistItems` (Loop): 5 requests total. We loop 5 times (once per selected channel) 
+      to get the newest 10 videos from their "Uploads" folder.
+   4. `fetchVideoDetails`: 1 request.
+  
+  The "Batching" Magic:
+  We take up to 50 video IDs (10 from each of the 5 channels), join them with commas, 
+  and fetch their full metadata (durations, stats) in a single batch request. 
+  This allows us to filter out "Shorts" (<= 180s) and Live Streams (P0D) efficiently.
+  
+  Total API Calls: 7-8
+  */
   async getSubsFeed() {
     const token = await this.getValidToken();
     if (token instanceof Response) return token;
@@ -107,10 +129,7 @@ export class YouTubeService extends Service {
       const subscriptions = await this.fetchYouTubeSubscriptions(token);
       if (subscriptions.length === 0) return this.renderEmptyRSS();
 
-      // Pick 5 random channels
-      // eslint-disable-next-line sonarjs/pseudo-random
-      const shuffled = subscriptions.sort(() => 0.5 - Math.random());
-      const selected = shuffled.slice(0, 5);
+      const selected = this.selectRotatedChannels(subscriptions);
 
       // Fetch videos from each channel's uploads playlist
       // Shortcut: UC{id} -> UU{id}
@@ -126,12 +145,18 @@ export class YouTubeService extends Service {
 
       // Fetch full details (statistics) for these videos
       const videoIds = allVideosRaw.map(v => v.contentDetails.videoId).join(',');
-      const videos = await this.fetchVideoDetails(token, videoIds);
+      const videosRaw = await this.fetchVideoDetails(token, videoIds);
+
+      // Filter out shorts (<= 180s)
+      const videos = videosRaw.filter(v => {
+        const seconds = this.parseDuration(v.contentDetails?.duration, v.id);
+        return isNaN(seconds) || seconds > 180;
+      });
 
       // Sort by date descending
       videos.sort((a, b) => new Date(b.snippet.publishedAt) - new Date(a.snippet.publishedAt));
 
-      const rss = this.convertYouTubeToRSS(videos, 'Subscriptions', null, 'https://www.youtube.com/feed/subscriptions');
+      const rss = this.convertYouTubeToRSS(videos, 'YouTube - Subscriptions', null, 'https://www.youtube.com/feed/subscriptions');
       const encoded = new TextEncoder().encode(rss);
       return new Response(encoded, {
         headers: {
@@ -146,14 +171,58 @@ export class YouTubeService extends Service {
     }
   }
 
+  selectRotatedChannels(subscriptions) {
+    const total = subscriptions.length;
+    const batchSize = 5;
+    const oldOffset = rotationOffset;
+
+    if (rotationOffset === null) {
+      // eslint-disable-next-line sonarjs/pseudo-random
+      rotationOffset = Math.floor(Math.random() * total);
+    }
+
+    const startIndex = (rotationOffset * batchSize) % total;
+    const scannedIndexes = [];
+    const selected = [];
+    for (let i = 0; i < batchSize; i++) {
+      const idx = (startIndex + i) % total;
+      scannedIndexes.push(idx);
+      if (!selected.includes(subscriptions[idx])) {
+        selected.push(subscriptions[idx]);
+      }
+    }
+    
+    const nextOffset = rotationOffset + 1;
+    const offsetLog = (oldOffset) ? `saved(${oldOffset})` : `random(${rotationOffset})`;
+    console.log(`[YouTubeService.selectRotatedChannels] offset<${offsetLog},next(${nextOffset})> channels<scanning(${scannedIndexes.join(',')}),total(${total})>`);
+    
+    rotationOffset = nextOffset;
+    return selected;
+  }
+
   async fetchYouTubeSubscriptions(accessToken) {
-    const url = new URL('https://www.googleapis.com/youtube/v3/subscriptions');
-    url.searchParams.set('part', 'snippet');
-    url.searchParams.set('mine', 'true');
-    url.searchParams.set('maxResults', '50');
-    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}` } });
-    if (!res.ok) throw new Error('Subscription fetch failed');
-    return (await res.json()).items || [];
+    const fetchPage = async (pageToken = null) => {
+      const url = new URL('https://www.googleapis.com/youtube/v3/subscriptions');
+      url.searchParams.set('part', 'snippet');
+      url.searchParams.set('mine', 'true');
+      url.searchParams.set('maxResults', '50');
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
+      
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${accessToken}` } });
+      if (!res.ok) throw new Error('Subscription fetch failed');
+      return await res.json();
+    };
+
+    const firstPage = await fetchPage();
+    const items = firstPage.items || [];
+
+    // Fetch up to 100 total (2 pages)
+    if (firstPage.nextPageToken) {
+      const secondPage = await fetchPage(firstPage.nextPageToken);
+      if (secondPage.items) items.push(...secondPage.items);
+    }
+
+    return items;
   }
 
   convertPlaylistsToOPML(playlists, email) {
@@ -285,7 +354,7 @@ export class YouTubeService extends Service {
       // Sort based on the order returned by playlistItems
       const videos = videoIdOrder.map(id => videosRaw.find(v => v.id === id)).filter(v => v);
 
-      const feedTitle = playlistInfo.title;
+      const feedTitle = `YouTube - ${playlistInfo.title}`;
       const rss = this.convertYouTubeToRSS(videos, feedTitle, this.playlistId);
       const encoded = new TextEncoder().encode(rss);
       return new Response(encoded, { headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Content-Length': encoded.byteLength.toString(), 'Cache-Control': 'public, max-age=1800' } });
@@ -378,6 +447,27 @@ export class YouTubeService extends Service {
       }
     };
     return new XMLBuilder({ ignoreAttributes: false, attributeNamePrefix: '@_', format: true, suppressBooleanAttributes: false, suppressEmptyNode: true, cdataPropName: '__cdata' }).build(rssObj);
+  }
+
+  parseDuration(duration, videoId = 'unknown') {
+    if (typeof duration !== 'string' || !duration) {
+      console.error(`[YouTubeService.parseDuration] duration is missing or not a string for video ${videoId}`);
+      return NaN;
+    }
+    if (duration === 'P0D') {
+      console.log(`[YouTubeService.parseDuration] video ${videoId}: recognized "P0D" (Live), including in feed`);
+      return NaN;
+    }
+    const matches = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!matches || matches[0] === 'PT') {
+      console.error(`[YouTubeService.parseDuration] failed to parse duration "${duration}" for video ${videoId}`);
+      return NaN;
+    }
+    const h = parseInt(matches[1] || '0', 10);
+    const m = parseInt(matches[2] || '0', 10);
+    const s = parseInt(matches[3] || '0', 10);
+    const totalSeconds = h * 3600 + m * 60 + s;
+    return totalSeconds;
   }
 
   async handleDelete() {
