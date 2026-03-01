@@ -156,7 +156,7 @@ export class YouTubeService extends Service {
       // Sort by date descending
       videos.sort((a, b) => new Date(b.snippet.publishedAt) - new Date(a.snippet.publishedAt));
 
-      const rss = this.convertYouTubeToRSS(videos, 'Subscriptions', null, 'https://www.youtube.com/feed/subscriptions');
+      const rss = this.convertYouTubeToRSS(videos, 'YouTube - Subscriptions', null, 'https://www.youtube.com/feed/subscriptions');
       const encoded = new TextEncoder().encode(rss);
       return new Response(encoded, {
         headers: {
@@ -354,7 +354,7 @@ export class YouTubeService extends Service {
       // Sort based on the order returned by playlistItems
       const videos = videoIdOrder.map(id => videosRaw.find(v => v.id === id)).filter(v => v);
 
-      const feedTitle = playlistInfo.title;
+      const feedTitle = `YouTube - ${playlistInfo.title}`;
       const rss = this.convertYouTubeToRSS(videos, feedTitle, this.playlistId);
       const encoded = new TextEncoder().encode(rss);
       return new Response(encoded, { headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Content-Length': encoded.byteLength.toString(), 'Cache-Control': 'public, max-age=1800' } });

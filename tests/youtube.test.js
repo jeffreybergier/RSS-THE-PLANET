@@ -186,7 +186,7 @@ describe('YouTube Service Integration', () => {
     expect(res.headers.get('Content-Type')).toContain('text/xml');
     const body = await res.text();
     expect(body).toContain('<rss');
-    expect(body).toContain('<title>Mock Playlist</title>');
+    expect(body).toContain('<title>YouTube - Mock Playlist</title>');
     expect(body).toContain('<link>https://www.youtube.com/playlist?list=pl1</link>');
     expect(body).toContain('<table>');
     expect(body).toContain('<tr><td>Video 1 Chan 1</td></tr>');
@@ -241,7 +241,7 @@ describe('YouTube Service Integration', () => {
 
     expect(res.status).toBe(200);
     const body = await res.text();
-    expect(body).toContain('<title>Subscriptions</title>');
+    expect(body).toContain('<title>YouTube - Subscriptions</title>');
     expect(body).toContain('<link>https://www.youtube.com/feed/subscriptions</link>');
     expect(body).toContain('Sub Video 1');
     expect(body).toContain('Sub Video 2');
