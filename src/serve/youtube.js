@@ -82,8 +82,15 @@ export class YouTubeService extends Service {
     if (!entry) return renderError(404, 'Account not found', this.requestURL.pathname);
     const data = JSON.parse(entry.value);
 
+    let token;
     try {
-      const token = await this.getAccessToken(data.refresh_token);
+      token = await this.getAccessToken(data.refresh_token);
+    } catch (e) {
+      console.error(`[YouTubeService.getOPML] Refresh failed for ${this.uuid}: ${e.message}`);
+      return renderError(401, 'YouTube authentication expired. Please reconnect your account in the dashboard.', this.requestURL.pathname);
+    }
+
+    try {
       const playlists = await this.fetchYouTubePlaylists(token);
       const opml = this.convertPlaylistsToOPML(playlists, data.email);
       const encoded = new TextEncoder().encode(opml);
@@ -130,17 +137,7 @@ export class YouTubeService extends Service {
       if (subscriptions.length === 0) return this.renderEmptyRSS();
 
       const selected = this.selectRotatedChannels(subscriptions);
-
-      // Fetch videos from each channel's uploads playlist
-      // Shortcut: UC{id} -> UU{id}
-      const videoPromises = selected.map(async (sub) => {
-        const channelId = sub.snippet.resourceId.channelId;
-        const uploadsId = 'UU' + channelId.substring(2);
-        const items = await this.fetchPlaylistItems(token, uploadsId);
-        return items.slice(0, 10); // Take newest 10 from each to stay under 50 total
-      });
-
-      const allVideosRaw = (await Promise.all(videoPromises)).flat().filter(v => v);
+      const allVideosRaw = await this.fetchVideosFromChannels(token, selected);
       if (allVideosRaw.length === 0) return this.renderEmptyRSS();
 
       // Fetch full details (statistics) for these videos
@@ -169,6 +166,25 @@ export class YouTubeService extends Service {
       console.error(`[YouTubeService.getSubsFeed] error: ${e.message}`);
       return renderError(502, 'Failed to generate subscriptions feed', this.requestURL.pathname);
     }
+  }
+
+  async fetchVideosFromChannels(token, channels) {
+    // Fetch videos from each channel's uploads playlist
+    // Shortcut: UC{id} -> UU{id}
+    const videoPromises = channels.map(async (sub) => {
+      const channelId = sub.snippet.resourceId.channelId;
+      const uploadsId = 'UU' + channelId.substring(2);
+      try {
+        const items = await this.fetchPlaylistItems(token, uploadsId);
+        return items.slice(0, 10); // Take newest 10 from each to stay under 50 total
+      } catch (e) {
+        console.error(`[YouTubeService.fetchVideosFromChannels] skipping channel<${channelId}> reason<${e.message}>`);
+        return [];
+      }
+    });
+
+    const results = await Promise.all(videoPromises);
+    return results.flat().filter(v => v);
   }
 
   selectRotatedChannels(subscriptions) {
@@ -310,7 +326,12 @@ export class YouTubeService extends Service {
     const entry = await this.kvs.get(this.uuid);
     if (!entry) return renderError(404, 'Account not found', this.requestURL.pathname);
     const data = JSON.parse(entry.value);
-    return await this.getAccessToken(data.refresh_token);
+    try {
+      return await this.getAccessToken(data.refresh_token);
+    } catch (e) {
+      console.error(`[YouTubeService.getValidToken] Refresh failed for ${this.uuid}: ${e.message}`);
+      return renderError(401, 'YouTube authentication expired. Please reconnect your account in the dashboard.', this.requestURL.pathname);
+    }
   }
 
   async getAccessToken(refreshToken) {
@@ -335,13 +356,10 @@ export class YouTubeService extends Service {
   }
 
   async getPlaylistRSS() {
-    if (!this.authKey || !this.kvs) return renderError(401, 'Unauthorized', this.requestURL.pathname);
-    const entry = await this.kvs.get(this.uuid);
-    if (!entry) return renderError(404, 'Account not found', this.requestURL.pathname);
-    const data = JSON.parse(entry.value);
+    const token = await this.getValidToken();
+    if (token instanceof Response) return token;
 
     try {
-      const token = await this.getAccessToken(data.refresh_token);
       const [pItems, playlistInfo] = await Promise.all([
         this.fetchPlaylistItems(token, this.playlistId),
         this.fetchPlaylistInfo(token, this.playlistId)
