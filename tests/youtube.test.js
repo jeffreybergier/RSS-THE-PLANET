@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { YouTubeService, __setRotationOffset } from '../src/serve/youtube.js';
+import { YouTubeService } from '../src/serve/youtube.js';
 import { Endpoint } from '../src/serve/service.js';
 import { Auth } from '../src/lib/auth.js';
 import { KVSValue, KVSAdapter } from '../src/adapt/kvs.js';
@@ -386,7 +386,7 @@ describe('YouTube Service Integration', () => {
       const encryptedValue = await SHA256.__encrypt(JSON.stringify({ refresh_token: 'mock-refresh' }), 'test-secret' + 'test-key');
       kvsMap.set('test-uuid', new KVSValue('test-uuid', 'test@example.com', encryptedValue, 'YOUTUBE', 'test-key'));
       
-      __setRotationOffset(offset);
+      Auth.YOUTUBE_SUBS_REFRESH = offset;
       global.fetch = vi.fn().mockImplementation((url) => {
         const urlStr = url.toString();
         // Handle token refresh

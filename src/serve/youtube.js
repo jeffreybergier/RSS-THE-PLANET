@@ -8,11 +8,11 @@ import * as UI from '../ui/youtube.js';
 import { renderUpdateActionScript } from '../ui/shared.js';
 import { XMLBuilder } from 'fast-xml-parser';
 import * as Crypto from '../adapt/crypto.js';
+import { Auth } from '../lib/auth.js';
 
 // MARK: Global State
 
-let rotationOffset = null;
-export const __setRotationOffset = (val) => { rotationOffset = val; };
+// rotationOffset is now handled by Auth.YOUTUBE_SUBS_REFRESH
 
 // MARK: YouTubeService Class
 
@@ -190,14 +190,14 @@ export class YouTubeService extends Service {
   selectRotatedChannels(subscriptions) {
     const total = subscriptions.length;
     const batchSize = 5;
-    const oldOffset = rotationOffset;
+    const oldOffset = Auth.YOUTUBE_SUBS_REFRESH;
 
-    if (rotationOffset === null) {
+    if (Auth.YOUTUBE_SUBS_REFRESH === null) {
       // eslint-disable-next-line sonarjs/pseudo-random
-      rotationOffset = Math.floor(Math.random() * total);
+      Auth.YOUTUBE_SUBS_REFRESH = Math.floor(Math.random() * total);
     }
 
-    const startIndex = (rotationOffset * batchSize) % total;
+    const startIndex = (Auth.YOUTUBE_SUBS_REFRESH * batchSize) % total;
     const scannedIndexes = [];
     const selected = [];
     for (let i = 0; i < batchSize; i++) {
@@ -208,11 +208,11 @@ export class YouTubeService extends Service {
       }
     }
     
-    const nextOffset = rotationOffset + 1;
-    const offsetLog = (oldOffset) ? `saved(${oldOffset})` : `random(${rotationOffset})`;
+    const nextOffset = Auth.YOUTUBE_SUBS_REFRESH + 1;
+    const offsetLog = (oldOffset) ? `saved(${oldOffset})` : `random(${Auth.YOUTUBE_SUBS_REFRESH})`;
     console.log(`[YouTubeService.selectRotatedChannels] offset<${offsetLog},next(${nextOffset})> channels<scanning(${scannedIndexes.join(',')}),total(${total})>`);
     
-    rotationOffset = nextOffset;
+    Auth.YOUTUBE_SUBS_REFRESH = nextOffset;
     return selected;
   }
 

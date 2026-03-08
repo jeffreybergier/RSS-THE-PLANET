@@ -2,8 +2,12 @@
 export class Auth {
 
   static VALID_KEYS = null;
+  static YOUTUBE_SUBS_REFRESH = null;
 
   static load(env) {
+    if (Auth.YOUTUBE_SUBS_REFRESH) {
+      console.log(`[Auth.load] Recycled: YOUTUBE_SUBS_REFRESH(${Auth.YOUTUBE_SUBS_REFRESH})`);
+    }
     if (Auth.VALID_KEYS instanceof Set) {
       console.log(`[Auth.load] Recycled: ${Auth.VALID_KEYS.size}`);
       return;
