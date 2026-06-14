@@ -33,13 +33,3 @@ export const renderProxySubmitForm = (key) => `
     </p>
   </form>
 `;
-
-const escapeAttribute = (value) =>
-  String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
-export const renderAnchorActionLinks = (proxyURL, readerURL) =>
-  ` <a href="${escapeAttribute(proxyURL)}">(Proxy)</a> <a href="${escapeAttribute(readerURL)}">(Reader)</a>`;
