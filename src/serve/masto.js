@@ -1,6 +1,8 @@
 import { Service, Endpoint } from './service.js';
+import { HTMLRewriter } from '../adapt/html-rewriter.js';
 import { Codec } from '../lib/codec.js';
 import { Option } from '../lib/option.js';
+import { ProxyService } from './proxy.js';
 import { renderError } from '../ui/error.js';
 import { renderLayout } from '../ui/theme.js';
 import { KVSAdapter, KVSValue } from '../adapt/kvs.js';
@@ -99,10 +101,10 @@ export class MastoService extends Service {
     return null;
   }
 
-  renderRSSResponse(all, mode, authKey, serverName) {
-    const rss = mode === 'notifications' 
-      ? this.convertNotificationsJSONtoRSS(all, authKey, serverName) 
-      : this.convertJSONtoRSS(all, mode, authKey, serverName);
+  async renderRSSResponse(all, mode, authKey, serverName) {
+    const rss = mode === 'notifications'
+      ? await this.convertNotificationsJSONtoRSS(all, authKey, serverName)
+      : await this.convertJSONtoRSS(all, mode, authKey, serverName);
     const encoded = new TextEncoder().encode(rss);
     const headers = { 
       'Content-Type': 'text/xml; charset=utf-8', 
@@ -146,24 +148,25 @@ export class MastoService extends Service {
     return all.slice(0, 100);
   }
 
-  convertNotificationsJSONtoRSS(json, authKey, serverUrl) {
+  async convertNotificationsJSONtoRSS(json, authKey, serverUrl) {
     if (!Array.isArray(json)) return '';
     const hostname = new URL(serverUrl).hostname;
-    const items = json.map(n => this.mapNotificationToRSS(n, authKey, hostname));
+    const items = await Promise.all(json.map(n => this.mapNotificationToRSS(n, authKey, serverUrl)));
     return this.buildRSS(items, `${hostname} - Notifications`, serverUrl);
   }
 
-  mapNotificationToRSS(notif, authKey, hostname) {
+  async mapNotificationToRSS(notif, authKey, serverUrl) {
     const { type, account, status } = notif;
+    const hostname = new URL(serverUrl).hostname;
     const name = account.display_name || account.username;
     const proxiedAvatar = this.proxyURL(account.avatar, Option.image, authKey);
     const triggerer = UI.renderTriggererSignature(account, hostname, proxiedAvatar);
-    const content = status ? this.formatStatusContent(status, authKey, hostname) : '';
+    const content = status ? await this.formatStatusContent(status, authKey, serverUrl) : '';
     const html = status ? `<div>${triggerer}<hr>${content}</div>` : `<div>${triggerer}</div>`;
     
     return {
       title: this.getNotificationTitle(type, name, status),
-      link: this.wrapBrutaldon(status?.url || account.url),
+      link: status?.url || account.url,
       guid: { '@_isPermaLink': 'true', '#text': `${notif.id}-${type}` },
       pubDate: new Date(notif.created_at).toUTCString(),
       description: { '__cdata': html },
@@ -186,22 +189,23 @@ export class MastoService extends Service {
     return titles[type] || `🔔 ${type} from ${name}`;
   }
 
-  convertJSONtoRSS(json, subtype, authKey, serverUrl) {
+  async convertJSONtoRSS(json, subtype, authKey, serverUrl) {
     if (!Array.isArray(json)) return '';
     const hostname = new URL(serverUrl).hostname;
-    const items = json.map(s => this.mapStatusToRSS(s, authKey, hostname));
+    const items = await Promise.all(json.map(s => this.mapStatusToRSS(s, authKey, serverUrl)));
     const title = `${hostname} - ${subtype.charAt(0).toUpperCase() + subtype.slice(1)}`;
     return this.buildRSS(items, title, serverUrl);
   }
 
-  mapStatusToRSS(status, authKey, hostname) {
+  async mapStatusToRSS(status, authKey, serverUrl) {
     const data = status.reblog || status;
+    const hostname = new URL(serverUrl).hostname;
     return {
       title: this.getStatusTitle(status),
-      link: this.wrapBrutaldon(data.url),
+      link: data.url,
       guid: { '@_isPermaLink': 'true', '#text': data.url },
       pubDate: new Date(data.created_at).toUTCString(),
-      description: { '__cdata': this.formatStatusContent(data, authKey, hostname) },
+      description: { '__cdata': await this.formatStatusContent(data, authKey, serverUrl) },
       'dc:creator': this.formatAccountName(data.account, hostname),
       'dc:language': data.language || 'en'
     };
@@ -290,12 +294,41 @@ export class MastoService extends Service {
     return `${account.display_name || account.username} (${handle})`;
   }
 
-  wrapBrutaldon(url) {
-    return url ? `https://brutaldon.org/search_results?q=${encodeURIComponent(url)}` : url;
+  brutaldonThreadURL(value) {
+    const id = this.mastodonStatusID(value);
+    return id ? `https://brutaldon.org/thread/${id}#toot-${id}` : null;
   }
 
-  formatStatusContent(data, authKey, hostname) {
-    let html = `<div><div>${data.content}</div>`;
+  mastodonStatusID(value) {
+    if (!value) return null;
+    if (typeof value === 'object' && !(value instanceof URL)) return this.statusIDFromObject(value);
+    const url = value instanceof URL ? value : URL.parse(String(value));
+    if (!url) return null;
+    return this.statusIDFromURL(url);
+  }
+
+  statusIDFromObject(data) {
+    if (this.isNumericID(data.id)) return data.id;
+    return this.mastodonStatusID(data.url);
+  }
+
+  statusIDFromURL(url) {
+    const segments = url.pathname.split('/').filter(Boolean);
+    const id = segments.at(-1);
+    if (!this.isNumericID(id)) return null;
+    const prev = segments.at(-2);
+    if (prev?.startsWith('@') || prev === 'statuses') return id;
+    return null;
+  }
+
+  isNumericID(value) {
+    return /^\d+$/.test(String(value || ''));
+  }
+
+  async formatStatusContent(data, authKey, serverUrl) {
+    const content = await this.rewriteStatusLinks(data.content || '', authKey, serverUrl, data);
+    const hostname = new URL(serverUrl).hostname;
+    let html = `<div><div>${content}</div>`;
     if (data.media_attachments?.length > 0) {
       html += '<div class="media">';
       data.media_attachments.forEach(m => { html += this.formatMedia(m, authKey); });
@@ -303,7 +336,64 @@ export class MastoService extends Service {
     }
     const proxiedAvatar = this.proxyURL(data.account.avatar, Option.image, authKey);
     const footer = UI.renderStatusFooter(data, data.account, hostname, proxiedAvatar);
-    return html + footer + '</div>';
+    return html + this.statusActionsHTML(data) + footer + '</div>';
+  }
+
+  async rewriteStatusLinks(htmlString, authKey, serverUrl, data) {
+    if (!htmlString || typeof htmlString !== 'string') return htmlString;
+    const skipped = this.ignoredStatusLinkURLs(data);
+    const transformed = new HTMLRewriter()
+      .on('a', { element: el => this.rewriteStatusLink(el, authKey, serverUrl, skipped) })
+      .transform(new Response(htmlString));
+    return await transformed.text();
+  }
+
+  ignoredStatusLinkURLs(data) {
+    const urls = [
+      ...(data.mentions || []).map(item => item.url),
+      ...(data.tags || []).map(item => item.url)
+    ];
+    return new Set(urls.filter(Boolean).map(url => this.normalizedURL(url)).filter(Boolean));
+  }
+
+  rewriteStatusLink(el, authKey, serverUrl, skipped) {
+    const href = el.getAttribute('href');
+    if (!href) return;
+    const target = URL.parse(href, serverUrl);
+    if (!target) return;
+    const originalURL = target.toString();
+    el.setAttribute('href', originalURL);
+    if (skipped.has(this.normalizedURL(originalURL))) return;
+    const brutaldonURL = this.brutaldonThreadURL(target);
+    const actions = brutaldonURL ? this.brutaldonLinkActionsHTML(brutaldonURL) : this.proxyReaderLinkActionsHTML(target, authKey);
+    if (actions) el.after(` ${actions}`, { html: true });
+  }
+
+  normalizedURL(value) {
+    try {
+      const url = new URL(value);
+      url.hash = '';
+      return url.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  brutaldonLinkActionsHTML(brutaldonURL) {
+    return `<small>(<a href="${ProxyService.escapeAttr(brutaldonURL)}">Brutaldon</a>)</small>`;
+  }
+
+  proxyReaderLinkActionsHTML(target, authKey) {
+    const proxyURL = Codec.encode(target, Option.auto, this.baseURL, authKey).toString();
+    const readerURL = ProxyService.readerURL(target);
+    return `<small>(<a href="${ProxyService.escapeAttr(proxyURL)}">Proxy</a> &middot; <a href="${ProxyService.escapeAttr(readerURL)}">Reader</a>)</small>`;
+  }
+
+  statusActionsHTML(data) {
+    if (!data.url) return '';
+    const brutaldonURL = this.brutaldonThreadURL(data);
+    if (!brutaldonURL) return '';
+    return `<p><small><a href="${ProxyService.escapeAttr(data.url)}">Original</a> &middot; <a href="${ProxyService.escapeAttr(brutaldonURL)}">Brutaldon</a></small></p>`;
   }
 
   formatMedia(m, authKey) {

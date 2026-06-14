@@ -1,85 +1,38 @@
-## Handy Shortcuts
-# This file is purely optional and just allows easy shortcuts
-# for running all the function exposed in Docker.
-# To see original commands or to use without compose,
-# see Containerfile
-
-# docker compose up start
-# docker compose up start-wrangler
-# docker compose run --rm test
-# docker compose run --rm test-wrangler
-# docker compose run --rm gemini
-
-## 
-
 services:
-  # 1. Run App - Node.js
-  start:
-    build:
-      context: .
-      dockerfile: Containerfile
-      target: app
-    image: rssplanet-app
-    ports:
-      - "3000:3000"
-    volumes:
-      - .:/app
-      - /app/node_modules
-    command: npm start
-    tty: true
-
-  # 2. Run Test - Node.js
-  test:
-    build:
-      context: .
-      dockerfile: Containerfile
-      target: app
-    image: rssplanet-app
-    volumes:
-      - .:/app
-      - /app/node_modules
-    command: npm run test
-    tty: true
-
-  # 3. Run App - Wrangler
-  start-wrangler:
-    build:
-      context: .
-      dockerfile: Containerfile
-      target: app
-    image: rssplanet-app
-    ports:
-      - "3000:8787"
-    volumes:
-      - .:/app
-      - /app/node_modules
-    command: wrangler dev --ip 0.0.0.0
-    tty: true
-
-  # 4. Run Test - Wrangler
-  test-wrangler:
-    build:
-      context: .
-      dockerfile: Containerfile
-      target: app
-    image: rssplanet-app
-    volumes:
-      - .:/app
-      - /app/node_modules
-    command: npm run test:wrangler
-    tty: true
-
-  # 5. Run Gemini
-  gemini:
-    build:
-      context: .
-      dockerfile: Containerfile
-      target: gemini
-    image: rssplanet-gemini
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - ~/.gemini:/root/.gemini
-    command: gemini
+  altivec-intelligence:
+    image: ghcr.io/jeffreybergier/altivec-intelligence:latest
     stdin_open: true
     tty: true
+    environment:
+      - IS_SANDBOX=1
+    volumes:
+      - ~/.altivec:/root
+      - .:/repo/RSS-THE-PLANET
+    working_dir: /repo/RSS-THE-PLANET
+    entrypoint: /bin/bash
+    command: -lc "altivec-chooser"
+
+  # Runs Wrangler locally on every host interface so a browser can access
+  # http://localhost:3000 or http://<this-host-ip>:3000. Local binding state
+  # is persisted by Wrangler under .wrangler/state/v3 in this repo.
+  serve:
+    image: ghcr.io/jeffreybergier/altivec-intelligence:latest
+    working_dir: /repo/RSS-THE-PLANET
+    volumes:
+      - ~/.altivec:/root
+      - .:/repo/RSS-THE-PLANET
+    ports:
+      - '0.0.0.0:3000:3000'
+    entrypoint: /bin/bash
+    command: -lc "npm install --no-fund --no-audit && npx wrangler dev --local --ip 0.0.0.0 --port 3000"
+
+  # Runs the Node.js test suite once and exits with the test result code.
+  # Run with: docker compose run --rm test
+  test:
+    image: ghcr.io/jeffreybergier/altivec-intelligence:latest
+    working_dir: /repo/RSS-THE-PLANET
+    volumes:
+      - ~/.altivec:/root
+      - .:/repo/RSS-THE-PLANET
+    entrypoint: /bin/bash
+    command: -lc "npm install --no-fund --no-audit && npm test"
