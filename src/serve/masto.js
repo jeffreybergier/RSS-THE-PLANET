@@ -349,11 +349,24 @@ export class MastoService extends Service {
   }
 
   ignoredStatusLinkURLs(data) {
-    const urls = [
-      ...(data.mentions || []).map(item => item.url),
-      ...(data.tags || []).map(item => item.url)
-    ];
+    const urls = (data.mentions || []).map(item => item.url);
     return new Set(urls.filter(Boolean).map(url => this.normalizedURL(url)).filter(Boolean));
+  }
+
+  isTagURL(url) {
+    if (!url) return false;
+    const target = url instanceof URL ? url : URL.parse(String(url));
+    if (!target) return false;
+    const segments = target.pathname.split('/').filter(Boolean);
+    return segments.length >= 2 && segments[0] === 'tags';
+  }
+
+  brutaldonTagURL(url) {
+    const target = url instanceof URL ? url : URL.parse(String(url));
+    if (!target) return null;
+    const segments = target.pathname.split('/').filter(Boolean);
+    const tagName = segments.length >= 2 ? segments[1] : null;
+    return tagName ? `https://brutaldon.org/tags/${tagName}` : null;
   }
 
   rewriteStatusLink(el, authKey, serverUrl, skipped) {
@@ -364,6 +377,11 @@ export class MastoService extends Service {
     const originalURL = target.toString();
     el.setAttribute('href', originalURL);
     if (skipped.has(this.normalizedURL(originalURL))) return;
+    if (this.isTagURL(target)) {
+      const brutaldonTag = this.brutaldonTagURL(target);
+      if (brutaldonTag) el.after(` ${this.brutaldonLinkActionsHTML(brutaldonTag)}`, { html: true });
+      return;
+    }
     const brutaldonURL = this.brutaldonThreadURL(target);
     const actions = brutaldonURL ? this.brutaldonLinkActionsHTML(brutaldonURL) : this.proxyReaderLinkActionsHTML(target, authKey);
     if (actions) el.after(` ${actions}`, { html: true });
