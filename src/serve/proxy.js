@@ -8,6 +8,8 @@ import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 import { renderProxySubmitForm, renderLoginForm } from '../ui/proxy.js';
 import { renderUpdateActionScript } from '../ui/shared.js';
 
+const READER_ENDPOINT = `http:${'//'}search.nextcommunity.net/read.star`;
+
 // MARK: ProxyService Class
 
 export class ProxyService extends Service {
@@ -190,11 +192,11 @@ export class ProxyService extends Service {
     if (!Array.isArray(items)) items = [items];
     channel.item = items.slice(0, 30);
     for (const item of channel.item) {
-      await this.XML_encodeURL(item, 'link', Option.auto);
+      const itemURL = this.XML_getURL(item, 'link');
       await this.XML_encodeURL(item['itunes:image'], '@_href', Option.image);
       await this.XML_encodeURL(item.enclosure, '@_url', Option.asset);
       await this.XML_encodeURL(item['media:content'], '@_url', Option.asset);
-      await this.XML_rewriteEntryHTML(item);
+      await this.XML_rewriteEntryHTML(item, itemURL, 'description');
     }
   }
 
@@ -236,24 +238,40 @@ export class ProxyService extends Service {
     let links = entry.link || [];
     if (!Array.isArray(links)) links = [links];
     entry.link = links;
+    let entryURL = null;
     for (const link of links) {
       const url = URL.parse(link['@_href']);
       if (!url) continue;
       const opt = this.getAtomLinkOption(link);
+      if (this.keepAtomEntryLinkOriginal(link, opt)) {
+        if (!entryURL) entryURL = url;
+        continue;
+      }
       link['@_href'] = Codec.encode(url, opt, this.baseURL, this.authKey).toString();
     }
-    await this.XML_rewriteEntryHTML(entry);
+    await this.XML_rewriteEntryHTML(entry, entryURL, 'summary');
   }
 
-  async XML_rewriteEntryHTML(entry) {
+  keepAtomEntryLinkOriginal(link, option) {
+    const rel = String(link['@_rel'] || 'alternate').toLowerCase();
+    return rel === 'alternate' && (option === Option.html || option === Option.auto);
+  }
+
+  async XML_rewriteEntryHTML(entry, actionURL = null, fallbackField = null) {
     const fields = ['description', 'content:encoded', 'content', 'summary'];
+    let needsActions = Boolean(actionURL);
     for (const field of fields) {
-      if (!entry[field]) continue;
-      const val = entry[field];
-      const original = (typeof val === 'object' && val.__cdata) ? val.__cdata : val;
-      const rewritten = await this.rewriteHTMLString(original);
-      if (typeof val === 'object' && val.__cdata) val.__cdata = rewritten;
-      else entry[field] = rewritten;
+      const original = ProxyService.XML_textValue(entry[field]);
+      if (!original) continue;
+      let rewritten = await this.rewriteFeedHTMLString(original);
+      if (needsActions) {
+        rewritten = this.appendEntryActions(rewritten, actionURL);
+        needsActions = false;
+      }
+      ProxyService.XML_setTextValue(entry, field, rewritten);
+    }
+    if (needsActions && fallbackField) {
+      entry[fallbackField] = this.entryActionsHTML(actionURL);
     }
   }
 
@@ -281,10 +299,52 @@ export class ProxyService extends Service {
     }
   }
 
+  XML_getURL(parent, key) {
+    if (!parent) return null;
+    const raw = ProxyService.XML_textValue(parent[key]);
+    if (!raw) return null;
+    return URL.parse(raw.trim());
+  }
+
+  static XML_textValue(value) {
+    if (!value) return null;
+    if (typeof value === 'object' && '__cdata' in value) return value.__cdata;
+    return typeof value === 'string' ? value : null;
+  }
+
+  static XML_setTextValue(parent, key, value) {
+    const target = parent[key];
+    if (typeof target === 'object' && '__cdata' in target) target.__cdata = value;
+    else parent[key] = value;
+  }
+
   async rewriteHTMLString(htmlString) {
     if (!htmlString || typeof htmlString !== 'string') return htmlString;
     const transformed = await this.rewriteHTML(new Response(htmlString));
     return await transformed.text();
+  }
+
+  async rewriteFeedHTMLString(htmlString) {
+    if (!htmlString || typeof htmlString !== 'string') return htmlString;
+    const transformed = await this.rewriteFeedHTML(new Response(htmlString));
+    return await transformed.text();
+  }
+
+  async rewriteFeedHTML(response) {
+    const removeScripts = new HTMLRewriter()
+      .on('script', { element: el => el.remove() })
+      .on('noscript', { element: el => el.removeAndKeepContent() })
+      .transform(response);
+
+    const rewriter = new HTMLRewriter()
+      .on('a', { element: el => this.rewriteFeedLink(el) })
+      .on('*', { element: el => this.removeOnAttrs(el) })
+      .on('img', { element: el => this.rewriteAttr(el, 'src', Option.image) })
+      .on('video, audio, source', { element: el => this.rewriteAttr(el, 'src', Option.asset) })
+      .on('link[rel="stylesheet"]', { element: el => this.rewriteAttr(el, 'href', Option.asset) })
+      .on('img, source', { element: el => this.handleSrcset(el) });
+
+    return rewriter.transform(removeScripts);
   }
 
   async rewriteHTML(response) { 
@@ -302,6 +362,29 @@ export class ProxyService extends Service {
       .on('img, source', { element: el => this.handleSrcset(el) });
 
     return rewriter.transform(removeScripts);
+  }
+
+  rewriteFeedLink(el) {
+    const val = el.getAttribute('href');
+    if (!val) return;
+    const target = URL.parse(val, this.targetURL);
+    if (!target) return;
+    const originalURL = target.toString();
+    const proxyURL = Codec.encode(target, Option.auto, this.baseURL, this.authKey).toString();
+    const readerURL = ProxyService.readerURL(target);
+    el.setAttribute('href', originalURL);
+    el.after(` <small>(<a href="${ProxyService.escapeAttr(proxyURL)}">Proxy</a> &middot; <a href="${ProxyService.escapeAttr(readerURL)}">Reader</a>)</small>`, { html: true });
+  }
+
+  appendEntryActions(htmlString, actionURL) {
+    return `${htmlString}${this.entryActionsHTML(actionURL)}`;
+  }
+
+  entryActionsHTML(actionURL) {
+    const originalURL = actionURL.toString();
+    const proxyURL = Codec.encode(actionURL, Option.auto, this.baseURL, this.authKey).toString();
+    const readerURL = ProxyService.readerURL(actionURL);
+    return `<p><small><a href="${ProxyService.escapeAttr(originalURL)}">Original</a> &middot; <a href="${ProxyService.escapeAttr(proxyURL)}">Proxy</a> &middot; <a href="${ProxyService.escapeAttr(readerURL)}">Reader</a></small></p>`;
   }
 
   rewriteAttr(el, attr, option) {
@@ -339,6 +422,19 @@ export class ProxyService extends Service {
     }
     el.removeAttribute('srcset');
     el.removeAttribute('sizes');
+  }
+
+  static readerURL(targetURL) {
+    const readerURL = new URL(READER_ENDPOINT);
+    readerURL.searchParams.set('a', targetURL.toString());
+    return readerURL.toString();
+  }
+
+  static escapeAttr(value) {
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('"', '&quot;')
+      .replaceAll('<', '&lt;');
   }
 
   static sanitizedRequestHeaders(incomingHeaders) {
