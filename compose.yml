@@ -12,21 +12,19 @@ services:
     entrypoint: /bin/bash
     command: -lc "altivec-chooser"
 
-  # Runs the Node.js server on every host interface so a browser can access
-  # http://localhost:3000 or http://<this-host-ip>:3000.
+  # Runs Wrangler locally on every host interface so a browser can access
+  # http://localhost:3000 or http://<this-host-ip>:3000. Local binding state
+  # is persisted by Wrangler under .wrangler/state/v3 in this repo.
   serve:
     image: ghcr.io/jeffreybergier/altivec-intelligence:latest
     working_dir: /repo/RSS-THE-PLANET
     volumes:
       - ~/.altivec:/root
       - .:/repo/RSS-THE-PLANET
-    environment:
-      - HOST=0.0.0.0
-      - PORT=3000
     ports:
       - '0.0.0.0:3000:3000'
     entrypoint: /bin/bash
-    command: -lc "npm install --no-fund --no-audit && npm start"
+    command: -lc "npm install --no-fund --no-audit && npx wrangler dev --local --ip 0.0.0.0 --port 3000"
 
   # Runs the Node.js test suite once and exits with the test result code.
   # Run with: docker compose run --rm test
