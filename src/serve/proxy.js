@@ -5,7 +5,7 @@ import { Option } from '../lib/option.js';
 import { renderError } from '../ui/error.js';
 import { renderLayout } from '../ui/theme.js';
 import { XMLParser, XMLBuilder } from 'fast-xml-parser';
-import { renderProxySubmitForm, renderLoginForm } from '../ui/proxy.js';
+import { renderProxySubmitForm, renderLoginForm, renderAnchorActionLinks } from '../ui/proxy.js';
 import { renderUpdateActionScript } from '../ui/shared.js';
 
 // MARK: ProxyService Class
@@ -294,7 +294,7 @@ export class ProxyService extends Service {
       .transform(response);
     
     const rewriter = new HTMLRewriter()
-      .on('a', { element: el => this.rewriteAttr(el, 'href', Option.auto) })
+      .on('a', { element: el => this.rewriteVisibleAnchor(el) })
       .on('*', { element: el => this.removeOnAttrs(el) })
       .on('img', { element: el => this.rewriteAttr(el, 'src', Option.image) })
       .on('video, audio, source', { element: el => this.rewriteAttr(el, 'src', Option.asset) })
@@ -312,6 +312,35 @@ export class ProxyService extends Service {
         el.setAttribute(attr, Codec.encode(target, option, this.baseURL, this.authKey).toString());
       }
     }
+  }
+
+  rewriteVisibleAnchor(el) {
+    const rawHref = el.getAttribute('href');
+    if (!rawHref) return;
+
+    const href = rawHref.trim();
+    if (!href || href.startsWith('#')) return;
+
+    const target = URL.parse(href, this.targetURL);
+    if (!target) return;
+
+    if (target.protocol === 'mailto:' || target.protocol === 'tel:') return;
+    if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+      el.removeAttribute('href');
+      return;
+    }
+
+    const proxyURL = Codec.encode(target, Option.auto, this.baseURL, this.authKey).toString();
+    const readerURL = ProxyService.readerURL(target).toString();
+    el.setAttribute('href', target.toString());
+    el.after(renderAnchorActionLinks(proxyURL, readerURL), { html: true });
+  }
+
+  static readerURL(targetURL) {
+    const readerBaseURL = ['http:', '//search.nextcommunity.net/'].join('');
+    const readerURL = new URL('read.star', readerBaseURL);
+    readerURL.searchParams.set('a', targetURL.toString());
+    return readerURL;
   }
 
   removeOnAttrs(el) {
