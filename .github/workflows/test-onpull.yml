@@ -4,7 +4,6 @@ on:
   pull_request:
     branches:
       - main
-      - prod
   workflow_dispatch:
 
 permissions:
@@ -40,14 +39,14 @@ jobs:
         run: |
           npm run test:fast -- --reporter=default --reporter=junit --outputFile=test-results/node-fast.xml
           npm run test:e2e:fast -- --reporter=default --reporter=junit --outputFile=test-results/node-e2e-fast.xml
-     
+
       # 3. Run Wrangler Tests
       - name: Wrangler Fast and Slow
         continue-on-error: true
         run: |
           npm run test:fast:wrangler -- --reporter=default --reporter=junit --outputFile=test-results/wrangler-fast.xml
           npm run test:e2e:full:wrangler -- --reporter=default --reporter=junit --outputFile=test-results/wrangler-e2e-full.xml
-      
+
       # Upload Test Results
       - name: Upload Test Results
         if: always()
