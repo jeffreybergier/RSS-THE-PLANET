@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import * as Router from '../src/router.js';
 import { KVSAdapter, KVSValue } from '../src/adapt/kvs.js';
 import { SHA256 } from '../src/adapt/crypto.js';
+import { Codec } from '../src/lib/codec.js';
+import { Option } from '../src/lib/option.js';
 
 describe('Masto Service Integration', () => {
   const env = {
@@ -293,10 +295,59 @@ describe('Masto Service Integration', () => {
       expect(xml4).toContain('<title>↩️ to Author Name</title>');
       globalThis.fetch = originalFetch4;
 
-      // Check Brutaldon URL rewriting (Item link only)
-      expect(xml).toContain('link>https://brutaldon.org/search_results?q=https%3A%2F%2Fmastodon.test%2F%40original%2F10</link>');
+      // Check Brutaldon action links
+      expect(xml).toContain('<link>https://mastodon.test/@original/10</link>');
+      expect(xml).not.toContain('<link>https://brutaldon.org/');
+      expect(xml).toContain('<a href="https://mastodon.test/@original/10">Original</a> &middot; <a href="https://brutaldon.org/thread/10#toot-10">Brutaldon</a>');
+      expect(xml).not.toContain('brutaldon.org/search_results');
       // HTML content should remain original
       expect(xml).toContain('href="https://mastodon.test/@mentioned"');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('should add alternate actions to Mastodon post links', async () => {
+    const encryptedApiKey = await SHA256.__encrypt('test-token', env.ENCRYPTION_SECRET + 'test-key');
+    const kvs = new KVSAdapter(env, 'MASTO', 'test-key', new SHA256(env));
+    const entry = await kvs.put(new KVSValue(null, 'https://mastodon.test', encryptedApiKey, 'MASTO', 'test-key'));
+    const id = entry.key;
+    const externalURL = new URL('https://example.com/article');
+    const readerURL = `http:${'//'}search.nextcommunity.net/read.star?a=https%3A%2F%2Fexample.com%2Farticle`;
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      if (url.toString().includes('/api/v1/timelines/home')) {
+        return new Response(JSON.stringify([{
+          id: '42',
+          created_at: new Date().toISOString(),
+          url: 'https://mastodon.test/@user/42',
+          content: '<p>Read <a href="https://example.com/article">article</a>, <a href="https://mastodon.social/@someone/116747791238820735">thread</a>, and <a href="https://mastodon.test/@mentioned">mention</a>.</p>',
+          account: { username: 'user', acct: 'user', display_name: 'User', avatar: 'https://mastodon.test/avatar.png' },
+          mentions: [{ id: '99', acct: 'mentioned', username: 'mentioned', url: 'https://mastodon.test/@mentioned' }],
+          media_attachments: [],
+          language: 'en'
+        }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(null, { status: 404 });
+    };
+
+    try {
+      const statusRequest = new Request(`http://example.com/masto/${id}/status/home?key=test-key`);
+      const proxyBaseURL = new URL('/proxy/', new URL(statusRequest.url).origin);
+      const proxyURL = Codec.encode(externalURL, Option.auto, proxyBaseURL, 'test-key').toString();
+      const response = await Router.route(statusRequest, env, ctx);
+      const xml = await response.text();
+
+      expect(xml).toContain('<link>https://mastodon.test/@user/42</link>');
+      expect(xml).not.toContain('<link>https://brutaldon.org/');
+      expect(xml).toContain(`<a href="${externalURL}">article</a> <small>(<a href="${proxyURL.replaceAll('&', '&amp;')}">Proxy</a> &middot; <a href="${readerURL}">Reader</a>)</small>`);
+      expect(xml).toContain('<a href="https://mastodon.social/@someone/116747791238820735">thread</a> <small>(<a href="https://brutaldon.org/thread/116747791238820735#toot-116747791238820735">Brutaldon</a>)</small>');
+      expect(xml).toContain('<p><small><a href="https://mastodon.test/@user/42">Original</a> &middot; <a href="https://brutaldon.org/thread/42#toot-42">Brutaldon</a></small></p>');
+      expect(xml.indexOf('<p><small><a href="https://mastodon.test/@user/42">Original</a>')).toBeLessThan(xml.indexOf('↩️ 0・🔁 0・⭐ 0'));
+      expect(xml).toContain('<a href="https://mastodon.test/@mentioned">mention</a>');
+      expect(xml).not.toContain('<a href="https://mastodon.test/@mentioned">mention</a> <small>');
+      expect(xml).not.toContain('brutaldon.org/search_results');
     } finally {
       globalThis.fetch = originalFetch;
     }
