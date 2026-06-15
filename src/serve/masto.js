@@ -335,8 +335,9 @@ export class MastoService extends Service {
       html += '</div>';
     }
     const proxiedAvatar = this.proxyURL(data.account.avatar, Option.image, authKey);
-    const footer = UI.renderStatusFooter(data, data.account, hostname, proxiedAvatar);
-    return html + this.statusActionsHTML(data) + footer + '</div>';
+    const actionsHTML = this.statusActionsHTML(data);
+    const footer = UI.renderStatusFooter(data, data.account, hostname, proxiedAvatar, actionsHTML);
+    return html + footer + '</div>';
   }
 
   async rewriteStatusLinks(htmlString, authKey, serverUrl, data) {
