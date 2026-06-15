@@ -322,9 +322,10 @@ describe('Masto Service Integration', () => {
           id: '42',
           created_at: new Date().toISOString(),
           url: 'https://mastodon.test/@user/42',
-          content: '<p>Read <a href="https://example.com/article">article</a>, <a href="https://mastodon.social/@someone/116747791238820735">thread</a>, and <a href="https://mastodon.test/@mentioned">mention</a>.</p>',
+          content: '<p>Read <a href="https://example.com/article">article</a>, <a href="https://mastodon.social/@someone/116747791238820735">thread</a>, <a href="https://mastodon.test/@mentioned">mention</a>, and <a href="https://mastodon.test/tags/retroApple" class="mention hashtag" rel="tag">#<span>retroApple</span></a>.</p>',
           account: { username: 'user', acct: 'user', display_name: 'User', avatar: 'https://mastodon.test/avatar.png' },
           mentions: [{ id: '99', acct: 'mentioned', username: 'mentioned', url: 'https://mastodon.test/@mentioned' }],
+          tags: [{ name: 'retroApple', url: 'https://mastodon.test/tags/retroApple' }],
           media_attachments: [],
           language: 'en'
         }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -347,6 +348,9 @@ describe('Masto Service Integration', () => {
       expect(xml.indexOf('<p><small><a href="https://mastodon.test/@user/42">Original</a>')).toBeLessThan(xml.indexOf('↩️ 0・🔁 0・⭐ 0'));
       expect(xml).toContain('<a href="https://mastodon.test/@mentioned">mention</a>');
       expect(xml).not.toContain('<a href="https://mastodon.test/@mentioned">mention</a> <small>');
+      // Hashtag links should get a Brutaldon tag link, not Proxy/Reader
+      expect(xml).toContain('href="https://mastodon.test/tags/retroApple"');
+      expect(xml).toContain('retroApple</span></a> <small>(<a href="https://brutaldon.org/tags/retroApple">Brutaldon</a>)</small>');
       expect(xml).not.toContain('brutaldon.org/search_results');
     } finally {
       globalThis.fetch = originalFetch;
