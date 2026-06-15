@@ -345,7 +345,7 @@ describe('Masto Service Integration', () => {
       expect(xml).toContain(`<a href="${externalURL}">article</a> <small>(<a href="${proxyURL.replaceAll('&', '&amp;')}">Proxy</a> &middot; <a href="${readerURL}">Reader</a>)</small>`);
       expect(xml).toContain('<a href="https://mastodon.social/@someone/116747791238820735">thread</a> <small>(<a href="https://brutaldon.org/thread/116747791238820735#toot-116747791238820735">Brutaldon</a>)</small>');
       expect(xml).toContain('<p><small><a href="https://mastodon.test/@user/42">Original</a> &middot; <a href="https://brutaldon.org/thread/42#toot-42">Brutaldon</a></small></p>');
-      expect(xml.indexOf('<p><small><a href="https://mastodon.test/@user/42">Original</a>')).toBeLessThan(xml.indexOf('↩️ 0・🔁 0・⭐ 0'));
+      expect(xml.indexOf('<p><small><a href="https://mastodon.test/@user/42">Original</a>')).toBeGreaterThan(xml.indexOf('↩️ 0・🔁 0・⭐ 0'));
       expect(xml).toContain('<a href="https://mastodon.test/@mentioned">mention</a>');
       expect(xml).not.toContain('<a href="https://mastodon.test/@mentioned">mention</a> <small>');
       // Hashtag links should get a Brutaldon tag link, not Proxy/Reader

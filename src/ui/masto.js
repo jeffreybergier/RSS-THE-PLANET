@@ -69,10 +69,11 @@ export const renderTriggererSignature = (account, hostname, proxiedAvatar) => `
   </div>
 `;
 
-export const renderStatusFooter = (data, account, hostname, proxiedAvatar) => `
+export const renderStatusFooter = (data, account, hostname, proxiedAvatar, actionsHTML = '') => `
   <p>
     ↩️ ${data.replies_count || 0}・🔁 ${data.reblogs_count || 0}・⭐ ${data.favourites_count || 0}
   </p>
+  ${actionsHTML}
   <hr>
   <div>
     <strong>${account.display_name || account.username} (${account.acct.includes('@') ? account.acct : `${account.acct}@${hostname}`})</strong><br>
